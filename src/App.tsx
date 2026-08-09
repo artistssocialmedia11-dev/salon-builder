@@ -1631,7 +1631,7 @@ export default function App() {
 
         {/* LEFT COLUMN: THE ATELIER CONTROL BOARD */}
         {!isCustomerOnlyMode && (
-          <section className={`fixed bottom-0 left-0 right-0 max-h-[80vh] overflow-y-auto rounded-t-2xl lg:rounded-none lg:relative lg:top-0 lg:h-full lg:w-[480px] z-50 lg:z-auto border-t lg:border-t-0 lg:border-r border-white/[0.05] bg-slate-900 lg:bg-[#0A0A0A] text-white flex flex-col transition-transform duration-300 shadow-2xl pb-24 transform ${
+          <section className={`fixed bottom-0 left-0 right-0 max-h-[80vh] overflow-y-auto rounded-t-2xl lg:rounded-none lg:relative lg:top-0 lg:min-h-screen lg:w-[480px] z-50 lg:z-auto border-t lg:border-t-0 lg:border-r border-white/[0.05] bg-slate-900 lg:bg-[#0A0A0A] text-white flex flex-col transition-transform duration-300 shadow-2xl pb-24 transform ${
             sidebarOpen ? 'translate-y-0' : 'translate-y-full lg:translate-y-0 lg:translate-x-0'
           }`}>
           
