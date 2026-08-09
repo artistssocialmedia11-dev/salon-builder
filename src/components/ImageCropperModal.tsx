@@ -279,10 +279,10 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex items-center justify-center p-4 overflow-y-auto">
+    <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
       <div 
         id="image-cropper-modal-container"
-        className="bg-[#0e0e0e] border border-white/10 w-full max-w-2xl rounded-2xl overflow-hidden shadow-2xl flex flex-col my-auto max-h-[90vh]"
+        className="bg-[#0e0e0e] border border-white/10 w-full max-w-2xl rounded-2xl overflow-hidden shadow-2xl flex flex-col my-auto h-[90vh] max-h-[90vh]"
       >
         {/* Header */}
         <div className="border-b border-white/[0.05] p-4 flex items-center justify-between bg-black/40">
