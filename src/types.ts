@@ -79,6 +79,7 @@ export interface WebsiteConfig {
     scroll: boolean;
     fade: boolean;
     glow: boolean;
+    smoothScroll?: boolean;
   };
   themeMode?: "dark" | "light" | "auto";
   showServicePrices?: boolean;

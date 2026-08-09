@@ -26,6 +26,7 @@ import {
   GripVertical,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
   Save,
   RefreshCw,
   ExternalLink,
@@ -156,7 +157,8 @@ const DEFAULT_CONFIG: WebsiteConfig = {
     hover: true,
     scroll: true,
     fade: true,
-    glow: true
+    glow: true,
+    smoothScroll: true
   },
   themeMode: "dark",
   showServicePrices: true,
@@ -357,6 +359,20 @@ const DEFAULT_CONFIG: WebsiteConfig = {
   ]
 };
 
+const HelpTooltip = ({ text }: { text: string }) => {
+  return (
+    <div className="group relative inline-flex items-center ml-1.5 align-middle">
+      <div className="w-3.5 h-3.5 rounded-full bg-white/[0.1] text-gray-400 hover:text-white flex items-center justify-center text-[9px] font-bold cursor-help transition-colors border border-white/[0.05]">
+        ?
+      </div>
+      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-stone-900 border border-white/10 text-[10px] text-stone-300 rounded shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 text-center leading-relaxed">
+        {text}
+        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-stone-900" />
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   // Config states
   const [siteConfig, setSiteConfig] = useState<WebsiteConfig>(() => {
@@ -515,7 +531,7 @@ export default function App() {
   // DB Showcase lists
   const [publishedSites, setPublishedSites] = useState<any[]>([]);
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
-  const [activeTab, setActiveTab] = useState<string>("branding");
+  const [activeStep, setActiveStep] = useState<number>(1);
   const [isCustomerOnlyMode, setIsCustomerOnlyMode] = useState<boolean>(false);
   
   // Booking Simulator States
@@ -558,6 +574,7 @@ export default function App() {
   const [aiError, setAiError] = useState<string | null>(null);
 
   // Custom AI Query parameters for generation controls
+  const [shopNameQuery, setShopNameQuery] = useState("");
   const [taglineQuery, setTaglineQuery] = useState("");
   const [taglineStyle, setTaglineStyle] = useState("luxurious & poetic");
 
@@ -842,7 +859,7 @@ export default function App() {
   /* ------------------------------------------------------------------ */
   /*  AI GEMINI ENDPOINT SERVICE CONNECTORS                             */
   /* ------------------------------------------------------------------ */
-  const generateAICopy = async (type: "tagline" | "about" | "services" | "seo") => {
+  const generateAICopy = async (type: "tagline" | "about" | "services" | "seo" | "shopName") => {
     setAiError(null);
     setAiLoading(prev => ({ ...prev, [type]: true }));
 
@@ -854,6 +871,9 @@ export default function App() {
       styleParam = taglineStyle;
     } else if (type === "seo") {
       queryParam = seoQuery || siteConfig.tagline;
+    } else if (type === "shopName") {
+      queryParam = shopNameQuery || "Luxury skincare and hair styling";
+      styleParam = "elegant and modern";
     }
 
     try {
@@ -878,6 +898,9 @@ export default function App() {
       if (type === "tagline") {
         setSiteConfig(prev => ({ ...prev, tagline: generated.tagline }));
         notifyShort("AI wrote a luxurious tagline!");
+      } else if (type === "shopName") {
+        setSiteConfig(prev => ({ ...prev, shopName: generated.shopName }));
+        notifyShort("AI generated a beautiful brand name!");
       } else if (type === "seo") {
         setSiteConfig(prev => ({
           ...prev,
@@ -931,6 +954,29 @@ export default function App() {
       notifyShort(err.message || "Failed to generate image descriptors.");
     } finally {
       setAiLoading(prev => ({ ...prev, [`alt_caption-${imgUrl}`]: false }));
+    }
+  };
+
+  const generateAllImageAltCaptions = async () => {
+    if (!siteConfig.gallery || siteConfig.gallery.length === 0) {
+      notifyShort("No images to process.");
+      return;
+    }
+
+    setAiLoading(prev => ({ ...prev, bulk_alt_caption: true }));
+    try {
+      // Process sequentially to avoid rate limits
+      for (const imgUrl of siteConfig.gallery) {
+        // Skip if already generated
+        const metadata = siteConfig.galleryMetadata?.[imgUrl];
+        if (metadata?.alt && metadata?.caption) {
+          continue;
+        }
+        await generateImageAltCaption(imgUrl);
+      }
+      notifyShort("Bulk AI Generation completed!");
+    } finally {
+      setAiLoading(prev => ({ ...prev, bulk_alt_caption: false }));
     }
   };
 
@@ -1400,8 +1446,8 @@ export default function App() {
 
             <div className="space-y-2 bg-black/40 p-2.5 rounded-xl border border-white/[0.03]">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-gray-400 font-medium">Mock Brand URL:</span>
-                <span className="text-[10px] text-[#D4AF37] font-semibold">Simulated DNS</span>
+                <span className="text-[10px] text-gray-400 font-medium">Web Address:</span>
+                <span className="text-[10px] text-[#D4AF37] font-semibold">Web Address Status</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="font-mono text-[11px] bg-black px-2 py-1.5 rounded text-gray-300 border border-white/[0.08] truncate flex-1 select-all">
@@ -1442,66 +1488,100 @@ export default function App() {
             </div>
           </div>
 
-          {/* STUDIO ACCORDION NAVIGATION */}
-          <nav className="flex bg-[#0E0E0E]/95 border-b border-white/[0.04] text-xs divide-x divide-white/[0.04] overflow-x-auto shrink-0 scrollbar-hide">
-            {[
-              { id: "branding", name: "Identity" },
-              { id: "theme", name: "Theming" },
-              { id: "content", name: "Content" },
-              { id: "booking", name: "Booking" },
-              { id: "sections", name: "Rows" },
-              { id: "contact", name: "Connect" }
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 min-w-[80px] text-center py-3.5 px-2 font-medium tracking-tight transition-all uppercase text-[9px] whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? "bg-gradient-to-b from-[#D4AF37]/15 to-[#D4AF37]/5 text-[#D4AF37] border-b-2 border-[#D4AF37]"
-                    : "text-gray-400 hover:text-white"
-                }`}
-              >
-                {tab.name}
-              </button>
-            ))}
+          {/* STEP-BY-STEP ONBOARDING WIZARD */}
+          <nav className="flex flex-col bg-[#0E0E0E]/95 border-b border-white/[0.04] p-3 space-y-3 shrink-0">
+            <div className="flex items-center justify-between">
+              {[
+                { id: 1, name: "Shop Details" },
+                { id: 2, name: "Design & Theme" },
+                { id: 3, name: "Services & Prices" },
+                { id: 4, name: "Publish" }
+              ].map(step => (
+                <button
+                  key={step.id}
+                  onClick={() => setActiveStep(step.id)}
+                  className={`flex flex-col items-center gap-1.5 flex-1 relative ${
+                    activeStep >= step.id ? "text-[#D4AF37]" : "text-gray-600"
+                  }`}
+                >
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold z-10 transition-colors ${
+                    activeStep === step.id ? "bg-[#D4AF37] text-black" :
+                    activeStep > step.id ? "bg-[#D4AF37]/20 border border-[#D4AF37]/50 text-[#D4AF37]" :
+                    "bg-white/[0.02] border border-white/[0.05] text-gray-500"
+                  }`}>
+                    {step.id}
+                  </div>
+                  <span className={`text-[9px] uppercase tracking-wider font-semibold whitespace-nowrap hidden md:block ${
+                    activeStep === step.id ? "text-white" : ""
+                  }`}>
+                    {step.name}
+                  </span>
+                  {/* Progress Line */}
+                  {step.id < 4 && (
+                    <div className="absolute top-3 left-[60%] w-full h-[1px] bg-white/[0.05] -z-0">
+                      <div className="h-full bg-[#D4AF37] transition-all" style={{ width: activeStep > step.id ? "100%" : "0%" }} />
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
           </nav>
-
-          {/* QUICK JUMP DRAWER (ONLY ON DESKTOP/WIDE SIDEBAR) */}
-          <div className="hidden md:flex flex-wrap gap-1 px-3 py-2 bg-black/40 border-b border-white/[0.02]">
-             <span className="text-[8px] font-mono text-gray-500 uppercase w-full mb-1">Quick Jump:</span>
-             <button onClick={() => { setActiveTab("branding"); setTimeout(() => document.getElementById("settings-subdomain")?.scrollIntoView({ behavior: 'smooth' }), 100); }} className="px-1.5 py-0.5 rounded bg-white/[0.03] text-[9px] text-[#D4AF37] hover:bg-white/[0.08]">Subdomain</button>
-             <button onClick={() => { setActiveTab("theme"); setTimeout(() => document.getElementById("settings-layout")?.scrollIntoView({ behavior: 'smooth' }), 100); }} className="px-1.5 py-0.5 rounded bg-white/[0.03] text-[9px] text-[#D4AF37] hover:bg-white/[0.08]">Layouts</button>
-             <button onClick={() => { setActiveTab("theme"); setTimeout(() => document.getElementById("settings-palette")?.scrollIntoView({ behavior: 'smooth' }), 100); }} className="px-1.5 py-0.5 rounded bg-white/[0.03] text-[9px] text-[#D4AF37] hover:bg-white/[0.08]">Colors</button>
-             <button onClick={() => { setActiveTab("content"); setTimeout(() => document.getElementById("settings-services")?.scrollIntoView({ behavior: 'smooth' }), 100); }} className="px-1.5 py-0.5 rounded bg-white/[0.03] text-[9px] text-[#D4AF37] hover:bg-white/[0.08]">Services</button>
-             <button onClick={() => { setActiveTab("content"); setTimeout(() => document.getElementById("settings-team")?.scrollIntoView({ behavior: 'smooth' }), 100); }} className="px-1.5 py-0.5 rounded bg-white/[0.03] text-[9px] text-[#D4AF37] hover:bg-white/[0.08]">Team</button>
-             <button onClick={() => { setActiveTab("booking"); setTimeout(() => document.getElementById("settings-booking")?.scrollIntoView({ behavior: 'smooth' }), 100); }} className="px-1.5 py-0.5 rounded bg-white/[0.03] text-[9px] text-[#D4AF37] hover:bg-white/[0.08]">Booking</button>
-          </div>
 
           {/* ATELIER CONTROLLER SHEETS - SCROLLABLE PANEL */}
           <div className="flex-1 overflow-y-auto p-5 space-y-6">
 
-            {/* TAB: BRANDING */}
-            {activeTab === "branding" && (
-              <div className="space-y-5 animate-fadeIn">
+            {/* STEP 1: SHOP DETAILS */}
+            {activeStep === 1 && (
+              <div className="space-y-6 animate-fadeIn pb-10">
                 <div className="p-3 bg-[#e2cc83]/5 border border-[#e2cc83]/25 rounded-xl space-y-1">
-                  <span className="text-[10px] text-[#e2cc83] uppercase tracking-wider font-bold">Concept Core</span>
-                  <p className="text-xs text-gray-300">Set the name, premium URL token, and signature tagline of the salon boutique.</p>
+                  <span className="text-[10px] text-[#e2cc83] uppercase tracking-wider font-bold">Step 1: Shop Details</span>
+                  <p className="text-xs text-gray-300">Set up your brand name, address, and social links.</p>
                 </div>
 
                 <div className="space-y-4 bg-[#111] border border-white/[0.04] rounded-xl p-4">
                   <div>
-                    <label className="block text-[11px] font-mono uppercase text-gray-400 mb-1">Salon / Shop Name</label>
-                    <input
-                      type="text"
-                      className="w-full bg-black border border-white/[0.08] focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37]/20 rounded-lg px-3 py-2 text-xs text-white"
-                      value={siteConfig.shopName}
-                      onChange={e => setSiteConfig(prev => ({ ...prev, shopName: e.target.value }))}
-                      placeholder="e.g. Royal Glow Boutique"
-                    />
+                    <label className="flex items-center text-[11px] font-mono uppercase text-gray-400 mb-1">
+                      Salon / Shop Name
+                      <HelpTooltip text="This is the main name displayed at the top of your website." />
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        className="flex-1 bg-black border border-white/[0.08] focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37]/20 rounded-lg px-3 py-2 text-xs text-white"
+                        value={siteConfig.shopName}
+                        onChange={e => setSiteConfig(prev => ({ ...prev, shopName: e.target.value }))}
+                        placeholder="e.g. Royal Glow Boutique"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => generateAICopy("shopName")}
+                        disabled={aiLoading["shopName"]}
+                        className="px-3 py-2 bg-white/[0.02] hover:bg-[#D4AF37]/10 hover:text-[#D4AF37] border border-white/[0.08] hover:border-[#D4AF37]/35 text-[9px] text-stone-400 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer select-none transition-all disabled:opacity-50"
+                      >
+                        {aiLoading["shopName"] ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-[#D4AF37]" />
+                        ) : (
+                          <Sparkles className="w-3.5 h-3.5 text-[#D4AF37]" />
+                        )}
+                        <span className="font-mono font-bold uppercase hidden xl:inline">AI Name</span>
+                      </button>
+                    </div>
+                    <div className="mt-2">
+                      <input
+                        type="text"
+                        className="w-full bg-black border border-[#D4AF37]/30 focus:border-[#D4AF37] rounded-lg px-2.5 py-1.5 text-[10px] text-white placeholder:text-gray-600"
+                        placeholder="Brief description for AI name generation (e.g., luxury organic hair salon)"
+                        value={shopNameQuery}
+                        onChange={e => setShopNameQuery(e.target.value)}
+                      />
+                    </div>
                   </div>
 
                   <div id="settings-subdomain">
-                    <label className="block text-[11px] font-mono uppercase text-gray-400 mb-1">Subdomain Prefix</label>
+                    <label className="flex items-center text-[11px] font-mono uppercase text-gray-400 mb-1">
+                      Choose Your Free Website Name
+                      <HelpTooltip text="This is the web address (URL) your clients will type to find you." />
+                    </label>
                     <div className="flex rounded-lg overflow-hidden border border-white/[0.08] focus-within:border-[#D4AF37] focus-within:ring-1 focus-within:ring-[#D4AF37]/20 bg-black text-xs">
                       <input
                         type="text"
@@ -1749,7 +1829,10 @@ export default function App() {
                 {/* TAGLINE & AI */}
                 <div className="bg-[#111] border border-white/[0.04] rounded-xl p-4 space-y-4">
                   <div className="flex items-center justify-between">
-                    <label className="block text-[11px] font-mono uppercase text-gray-400">Signature Tagline</label>
+                    <label className="flex items-center text-[11px] font-mono uppercase text-gray-400">
+                      Signature Tagline
+                      <HelpTooltip text="A short, memorable phrase describing your salon's vibe. Shown in the top header." />
+                    </label>
                     <span className="text-[10px] text-gray-500 italic">Visible in Header</span>
                   </div>
                   <textarea
@@ -1810,12 +1893,12 @@ export default function App() {
               </div>
             )}
 
-            {/* TAB: THEME */}
-            {activeTab === "theme" && (
+            {/* STEP 2: DESIGN & THEME */}
+            {activeStep === 2 && (
               <div className="space-y-5 animate-fadeIn pb-10">
                 <div className="p-3 bg-[#e2cc83]/5 border border-[#e2cc83]/25 rounded-xl space-y-1">
-                  <span className="text-[10px] text-[#e2cc83] uppercase tracking-wider font-bold">Atmography Settings</span>
-                  <p className="text-xs text-gray-300">Select typography styles and live palette colors to affect the customer-facing skin immediately.</p>
+                  <span className="text-[10px] text-[#e2cc83] uppercase tracking-wider font-bold">Step 2: Design & Theme</span>
+                  <p className="text-xs text-gray-300">Choose your website layout, colors, and fonts.</p>
                 </div>
 
                 {/* SECTION 2: Visibility Controls */}
@@ -1874,7 +1957,10 @@ export default function App() {
 
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-[10px] font-mono text-gray-500 uppercase mb-2">Main Headline</label>
+                      <label className="flex items-center text-[10px] font-mono text-gray-500 uppercase mb-2">
+                        Main Headline
+                        <HelpTooltip text="The very first big text clients see when they land on your site." />
+                      </label>
                       <input
                         type="text"
                         value={siteConfig.heroHeadline || ""}
@@ -1884,7 +1970,10 @@ export default function App() {
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-mono text-gray-500 uppercase mb-2">Sub Headline</label>
+                      <label className="flex items-center text-[10px] font-mono text-gray-500 uppercase mb-2">
+                        Sub Headline
+                        <HelpTooltip text="A brief sentence below the main headline that explains what makes you special." />
+                      </label>
                       <textarea
                         value={siteConfig.heroSubHeadline || ""}
                         onChange={(e) => setSiteConfig(prev => ({ ...prev, heroSubHeadline: e.target.value }))}
@@ -1893,7 +1982,10 @@ export default function App() {
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-mono text-gray-500 uppercase mb-2">Call To Action Button Text</label>
+                      <label className="flex items-center text-[10px] font-mono text-gray-500 uppercase mb-2">
+                        Call To Action Button Text
+                        <HelpTooltip text="What the main booking button should say, e.g. 'Book Now' or 'See Prices'." />
+                      </label>
                       <input
                         type="text"
                         value={siteConfig.heroCtaText || ""}
@@ -2406,9 +2498,14 @@ export default function App() {
                   >
                     <div className="flex items-center gap-2.5">
                       <Palette className="w-4 h-4 text-[#D4AF37]" />
-                      <div className="text-left">
-                        <span className="text-[11px] font-mono uppercase text-[#D4AF37] font-semibold block">Custom Color Palette</span>
-                        <span className="text-[9px] text-gray-400 font-light">Fine-tune individual theme channels or input precision hex codes</span>
+                      <div className="text-left flex items-center">
+                        <div>
+                          <span className="text-[11px] font-mono uppercase text-[#D4AF37] font-semibold block">Custom Color Palette</span>
+                          <span className="text-[9px] text-gray-400 font-light">Fine-tune individual theme channels or input precision hex codes</span>
+                        </div>
+                        <div className="ml-2">
+                          <HelpTooltip text="Advanced: Manually pick colors instead of using a pre-made theme." />
+                        </div>
                       </div>
                     </div>
                     <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-300 ${isColorPaletteExpanded ? "rotate-180" : ""}`} />
@@ -3073,7 +3170,8 @@ export default function App() {
                       { id: "hover", label: "Hover Effects" },
                       { id: "scroll", label: "Scroll Animation" },
                       { id: "fade", label: "Fade Effects" },
-                      { id: "glow", label: "Button Glow" }
+                      { id: "glow", label: "Button Glow" },
+                      { id: "smoothScroll", label: "Smooth Scroll" }
                     ].map(anim => (
                       <button
                         key={anim.id}
@@ -3164,11 +3262,11 @@ export default function App() {
 
 
             {/* TAB: SECTIONS LAYOUT ROWS */}
-            {activeTab === "sections" && (
+            {activeStep === 2 && (
               <div className="space-y-4 animate-fadeIn">
                 <div className="p-3 bg-[#e2cc83]/5 border border-[#e2cc83]/25 rounded-xl space-y-1">
                   <span className="text-[10px] text-[#e2cc83] uppercase tracking-wider font-bold">Homepage Section Architect</span>
-                  <p className="text-xs text-gray-300">Drag/reorder rows to redefine standard display flow or toggle specific modules on and off.</p>
+                  <p className="text-xs text-gray-300">Easily reorder the sections on your website by moving them up or down, or turn them off completely.</p>
                 </div>
 
                 <div className="bg-[#111] border border-white/[0.04] p-3 rounded-xl space-y-2">
@@ -3177,26 +3275,31 @@ export default function App() {
                       key={sec.id}
                       className="flex items-center justify-between bg-black px-3 py-2.5 rounded-lg border border-white/[0.05] group"
                     >
-                      <div className="flex items-center gap-2.5">
-                        <div className="text-gray-600 flex flex-col gap-0.5">
+                      <div className="flex items-center gap-3">
+                        <div className="text-gray-500 cursor-move hover:text-white transition-colors" title="Drag to reorder">
+                          <GripVertical className="w-4 h-4" />
+                        </div>
+                        <div className="flex flex-col gap-0.5 border-l border-white/[0.1] pl-2">
                           <button
                             onClick={() => moveSection(idx, "up")}
                             disabled={idx === 0}
-                            className="p-0.5 hover:text-[#D4AF37] disabled:opacity-30"
+                            className="p-0.5 hover:text-[#D4AF37] disabled:opacity-30 cursor-pointer text-gray-400"
+                            title="Move Up"
                           >
-                            <ChevronUp className="w-3.5 h-3.5" />
+                            <ChevronUp className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => moveSection(idx, "down")}
                             disabled={idx === siteConfig.sections.length - 1}
-                            className="p-0.5 hover:text-[#D4AF37] disabled:opacity-30"
+                            className="p-0.5 hover:text-[#D4AF37] disabled:opacity-30 cursor-pointer text-gray-400"
+                            title="Move Down"
                           >
-                            <ChevronDown className="w-3.5 h-3.5" />
+                            <ChevronDown className="w-4 h-4" />
                           </button>
                         </div>
-                        <div>
+                        <div className="ml-2">
                           <span className="text-xs font-semibold text-white">{sec.label}</span>
-                          <span className="block text-[8px] uppercase tracking-wider font-mono text-gray-500">Row {idx + 1}</span>
+                          <span className="block text-[9px] uppercase tracking-wider font-mono text-gray-500">Row {idx + 1}</span>
                         </div>
                       </div>
 
@@ -3221,7 +3324,7 @@ export default function App() {
             )}
 
             {/* TAB: CONTENT CONSOLIDATION */}
-            {activeTab === "content" && (
+            {activeStep === 3 && (
               <div className="space-y-6 animate-fadeIn pb-10">
                 <div className="p-3 bg-blue-500/5 border border-blue-500/10 rounded-xl space-y-1">
                   <span className="text-[10px] text-blue-400 uppercase tracking-wider font-bold">Business Content Hub</span>
@@ -3297,7 +3400,7 @@ export default function App() {
             )}
 
             {/* TAB: BOOKING CALENDAR & SLOTS DEFINITION */}
-            {activeTab === "booking" && (
+            {activeStep === 3 && (
               <div id="settings-booking" className="space-y-6 animate-fadeIn pb-10">
                 <div className="p-3 bg-amber-500/5 border border-amber-500/10 rounded-xl space-y-1">
                   <span className="text-[10px] text-amber-450 uppercase tracking-wider font-bold" style={{ color: siteConfig.primaryColor }}>Booking Calendar Config</span>
@@ -3585,7 +3688,7 @@ export default function App() {
             )}
 
             {/* TAB: CONTACT & SOCIALS & MAP */}
-            {activeTab === "contact" && (
+            {activeStep === 1 && (
               <div className="space-y-5 animate-fadeIn">
                 <div className="p-3 bg-[#e2cc83]/5 border border-[#e2cc83]/25 rounded-xl space-y-1">
                   <span className="text-[10px] text-[#e2cc83] uppercase tracking-wider font-bold">Contact & Location</span>
@@ -4022,18 +4125,36 @@ export default function App() {
                 <div className="bg-[#111] border border-white/[0.04] p-4 rounded-xl space-y-4">
                   <div className="flex justify-between items-center border-b border-white/[0.04] pb-2">
                     <h3 className="text-xs font-mono uppercase text-gray-400 font-bold">Style Portfolio Images</h3>
-                    <div className="relative cursor-pointer">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        id="gallery-add-input"
-                        className="hidden"
-                        onChange={handleAddGalleryImage}
-                      />
-                      <label htmlFor="gallery-add-input" className="text-xs text-[#D4AF37] hover:text-white cursor-pointer font-bold flex items-center gap-1">
-                        <Plus className="w-3.5 h-3.5" />
-                        Add Salon Photo
-                      </label>
+                    <div className="flex items-center gap-3">
+                      {siteConfig.gallery.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={generateAllImageAltCaptions}
+                          disabled={aiLoading.bulk_alt_caption}
+                          className="text-[10px] text-stone-400 hover:text-[#D4AF37] font-mono flex items-center gap-1 transition-colors disabled:opacity-50"
+                          title="Generate missing alt text for all images"
+                        >
+                          {aiLoading.bulk_alt_caption ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Sparkles className="w-3 h-3" />
+                          )}
+                          Generate All Alt Text
+                        </button>
+                      )}
+                      <div className="relative cursor-pointer">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          id="gallery-add-input"
+                          className="hidden"
+                          onChange={handleAddGalleryImage}
+                        />
+                        <label htmlFor="gallery-add-input" className="text-xs text-[#D4AF37] hover:text-white cursor-pointer font-bold flex items-center gap-1">
+                          <Plus className="w-3.5 h-3.5" />
+                          Add Salon Photo
+                        </label>
+                      </div>
                     </div>
                   </div>
 
@@ -4199,6 +4320,74 @@ export default function App() {
                 </div>
               </div>
             )}
+            
+            {/* STEP 4: PUBLISH */}
+            {activeStep === 4 && (
+              <div className="space-y-6 animate-fadeIn pb-10">
+                <div className="p-4 bg-[#D4AF37]/10 border border-[#D4AF37]/30 rounded-xl space-y-2 text-center">
+                  <div className="mx-auto w-12 h-12 bg-[#D4AF37] rounded-full flex items-center justify-center shadow-lg shadow-[#D4AF37]/20 mb-3">
+                    <Check className="w-6 h-6 text-black" />
+                  </div>
+                  <h3 className="text-lg text-[#D4AF37] tracking-wider font-bold">Ready to Publish</h3>
+                  <p className="text-sm text-gray-300">Your salon's digital presence is styled and ready to welcome clients.</p>
+                </div>
+
+                <div className="bg-[#111] border border-white/[0.04] rounded-xl p-5 space-y-4">
+                  <h4 className="text-xs font-mono uppercase text-gray-400 font-bold mb-3 border-b border-white/[0.04] pb-2">Publish Options</h4>
+                  
+                  <div className="space-y-3">
+                    <button
+                      onClick={() => {
+                        const liveUrl = `${window.location.origin}${window.location.pathname}?subdomain=${siteConfig.subdomain || "nexora-lounge"}`;
+                        window.open(liveUrl, "_blank");
+                        notifyShort("Launching live site over secure HTTPS...");
+                      }}
+                      className="w-full py-3 px-4 bg-[#D4AF37] hover:bg-[#c29e2f] active:scale-[0.98] transition-all text-black font-bold text-sm rounded-lg flex items-center justify-center gap-2 shadow-md shadow-[#D4AF37]/10 cursor-pointer"
+                    >
+                      <Globe className="w-4 h-4" />
+                      <span>Launch Live Site</span>
+                    </button>
+                    
+                    <button
+                      id="share-draft-button"
+                      onClick={handleShareDraft}
+                      className="w-full py-3 px-4 bg-gradient-to-r from-stone-900 to-stone-800 hover:from-stone-800 hover:to-stone-700 border border-white/[0.08] hover:border-white/20 text-sm text-white font-semibold rounded-lg flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95 shadow shadow-black/20"
+                    >
+                      <Share2 className="w-4 h-4" />
+                      <span>Share Preview Link</span>
+                    </button>
+                  </div>
+                  
+                  <p className="text-[11px] text-gray-500 leading-normal flex items-start gap-1 mt-4">
+                    <Info className="w-3.5 h-3.5 text-[#D4AF37] shrink-0 mt-0.5" />
+                    <span>
+                      Sharing the preview link will capture your current configuration. Launching the live site will open your simulated <code className="text-gray-400 font-mono bg-white/[0.05] px-1 py-0.5 rounded ml-0.5">.nexorasalonos.com</code> address.
+                    </span>
+                  </p>
+                </div>
+              </div>
+            )}
+            
+            {/* WIZARD NAVIGATION CONTROLS */}
+            <div className="flex items-center justify-between pt-6 mt-6 border-t border-white/[0.04]">
+              <button
+                onClick={() => setActiveStep(prev => Math.max(1, prev - 1))}
+                disabled={activeStep === 1}
+                className="px-4 py-2 bg-[#111] hover:bg-white/[0.04] text-xs text-stone-300 border border-white/[0.08] rounded-lg transition-all flex items-center gap-2 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                Previous
+              </button>
+              
+              <button
+                onClick={() => setActiveStep(prev => Math.min(4, prev + 1))}
+                disabled={activeStep === 4}
+                className="px-6 py-2 bg-[#D4AF37] hover:bg-[#c29e2f] active:scale-95 text-black text-xs font-bold rounded-lg transition-all shadow-lg shadow-[#D4AF37]/10 flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                Next
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         </section>
       )}
@@ -4311,7 +4500,9 @@ export default function App() {
 
               {/* CUSTOMER FRONTEND SIMULATOR BODY */}
               <div
-                className={`flex-1 overflow-y-auto customer-preview-container ${activeFontClass()} selection:bg-amber-100 selection:text-black`}
+                className={`flex-1 overflow-y-auto customer-preview-container ${activeFontClass()} selection:bg-amber-100 selection:text-black ${
+                  (siteConfig.animations as any)?.smoothScroll ? "scroll-smooth" : ""
+                }`}
                 style={{ backgroundColor: siteConfig.backgroundColor || siteConfig.secondaryColor, color: siteConfig.textColor || "#f3f4f6" }}
               >
                 {/* Custom typography rendering style injectors */}
@@ -4551,12 +4742,22 @@ export default function App() {
                                   {layoutStyle === "compact" ? "Est. Premium Care" : "Welcome to Premium Artistry"}
                                 </span>
                                 
-                                <h1 className={`font-semibold text-white leading-tight antialiased ${
-                                  layoutStyle === "luxury" ? "text-3xl md:text-4xl" :
-                                  layoutStyle === "modern" ? "text-4xl md:text-5xl" :
-                                  layoutStyle === "compact" ? "text-2xl md:text-3xl" :
-                                  "text-5xl md:text-6xl tracking-tighter"
-                                }`}>
+                                <h1 
+                                  className={`font-semibold text-white leading-tight antialiased cursor-pointer hover:opacity-80 transition-opacity ${
+                                    layoutStyle === "luxury" ? "text-3xl md:text-4xl" :
+                                    layoutStyle === "modern" ? "text-4xl md:text-5xl" :
+                                    layoutStyle === "compact" ? "text-2xl md:text-3xl" :
+                                    "text-5xl md:text-6xl tracking-tighter"
+                                  }`}
+                                  onClick={(e) => {
+                                    if (!isCustomerOnlyMode) {
+                                      e.preventDefault();
+                                      setActiveStep(2);
+                                      setTimeout(() => document.getElementById("settings-hero")?.scrollIntoView({ behavior: 'smooth' }), 100);
+                                    }
+                                  }}
+                                  title={!isCustomerOnlyMode ? "Click to edit Hero Settings" : ""}
+                                >
                                   {siteConfig.heroHeadline || siteConfig.shopName}
                                 </h1>
                                 
@@ -4621,7 +4822,17 @@ export default function App() {
                           >
                             <motion.div variants={premiumItemVariants} className="space-y-4">
                               <span className="text-[10px] uppercase tracking-[0.3em] font-mono opacity-50 block" style={{ color: siteConfig.primaryColor }}>{siteConfig.shopName} Heritage</span>
-                              <h2 className="text-3xl md:text-4xl font-semibold text-white tracking-tight">{siteConfig.aboutTitle || "Our Story"}</h2>
+                              <h2 
+                                className="text-3xl md:text-4xl font-semibold text-white tracking-tight cursor-pointer hover:opacity-80 transition-opacity"
+                                onClick={(e) => {
+                                  if (!isCustomerOnlyMode) {
+                                    e.preventDefault();
+                                    setActiveStep(3);
+                                    setTimeout(() => document.getElementById("settings-services")?.scrollIntoView({ behavior: 'smooth' }), 100);
+                                  }
+                                }}
+                                title={!isCustomerOnlyMode ? "Click to edit Services & Content" : ""}
+                              >{siteConfig.aboutTitle || "Our Story"}</h2>
                               <div className="w-16 h-0.5 bg-amber-500/20 mx-auto rounded" style={{ backgroundColor: `${siteConfig.primaryColor}40` }} />
                               <p className="text-sm md:text-base text-gray-400 leading-relaxed max-w-2xl mx-auto italic">
                                 {siteConfig.aboutDescription || "We provide unmatched quality and service."}
@@ -4629,7 +4840,6 @@ export default function App() {
                             </motion.div>
                           </motion.section>
                         );
-
                       // ROW: SERVICES
                       case "services":
                         const sLayoutStyle = siteConfig.layoutStyle || "luxury";
@@ -4650,9 +4860,19 @@ export default function App() {
                           >
                             <motion.div variants={premiumItemVariants} className={`space-y-2 ${sLayoutStyle === "modern" ? "text-left" : "text-center"}`}>
                               <span className="text-[10px] uppercase tracking-widest font-mono text-gray-500 block">Bespoke Ritual Catalog</span>
-                              <h2 className={`font-semibold text-white tracking-tight ${
-                                sLayoutStyle === "showcase" ? "text-4xl" : "text-2xl"
-                                }`}>Boutique Treatments</h2>
+                              <h2 
+                                className={`font-semibold text-white tracking-tight cursor-pointer hover:opacity-80 transition-opacity ${
+                                  sLayoutStyle === "showcase" ? "text-4xl" : "text-2xl"
+                                }`}
+                                onClick={(e) => {
+                                  if (!isCustomerOnlyMode) {
+                                    e.preventDefault();
+                                    setActiveStep(3);
+                                    setTimeout(() => document.getElementById("settings-services")?.scrollIntoView({ behavior: 'smooth' }), 100);
+                                  }
+                                }}
+                                title={!isCustomerOnlyMode ? "Click to edit Services" : ""}
+                              >Boutique Treatments</h2>
                               <div className={`w-12 h-1 bg-amber-500/20 rounded ${sLayoutStyle === "modern" ? "mr-auto" : "mx-auto"}`} style={{ backgroundColor: `${siteConfig.primaryColor}30` }} />
                             </motion.div>
 
@@ -4807,7 +5027,17 @@ ${serv.category ? `Category: ${serv.category}\n` : ""}${serv.duration ? `Duratio
                           >
                             <motion.div variants={premiumItemVariants} className="text-center space-y-2">
                               <span className="text-[10px] uppercase tracking-widest font-mono text-gray-500 block">Our Specialized Personnel</span>
-                              <h2 className="text-2xl font-semibold text-white tracking-tight">Savoir-Faire Specialists</h2>
+                              <h2 
+                                className="text-2xl font-semibold text-white tracking-tight cursor-pointer hover:opacity-80 transition-opacity"
+                                onClick={(e) => {
+                                  if (!isCustomerOnlyMode) {
+                                    e.preventDefault();
+                                    setActiveStep(3);
+                                    setTimeout(() => document.getElementById("settings-team")?.scrollIntoView({ behavior: 'smooth' }), 100);
+                                  }
+                                }}
+                                title={!isCustomerOnlyMode ? "Click to edit Team" : ""}
+                              >Savoir-Faire Specialists</h2>
                               <div className="w-12 h-1 bg-amber-500/20 mx-auto rounded" style={{ backgroundColor: `${siteConfig.primaryColor}30` }} />
                             </motion.div>
 
@@ -4983,7 +5213,17 @@ ${serv.category ? `Category: ${serv.category}\n` : ""}${serv.duration ? `Duratio
                           >
                             <motion.div variants={premiumItemVariants} className="text-center space-y-2">
                               <span className="text-[10px] uppercase tracking-widest font-mono text-gray-500 block">Visual Portfolios</span>
-                              <h2 className="text-2xl font-semibold text-white tracking-tight">Our Style Creations</h2>
+                              <h2 
+                                className="text-2xl font-semibold text-white tracking-tight cursor-pointer hover:opacity-80 transition-opacity"
+                                onClick={(e) => {
+                                  if (!isCustomerOnlyMode) {
+                                    e.preventDefault();
+                                    setActiveStep(2);
+                                    setTimeout(() => document.getElementById("gallery-add-input")?.scrollIntoView({ behavior: 'smooth' }), 100);
+                                  }
+                                }}
+                                title={!isCustomerOnlyMode ? "Click to edit Gallery" : ""}
+                              >Our Style Creations</h2>
                               <div className="w-12 h-1 bg-amber-500/20 mx-auto rounded" style={{ backgroundColor: `${siteConfig.primaryColor}30` }} />
                               {siteConfig.galleryNarrative && (
                                 <p className="text-xs text-stone-300 max-w-md mx-auto mt-3 font-light leading-relaxed antialiased">
@@ -5056,7 +5296,17 @@ ${serv.category ? `Category: ${serv.category}\n` : ""}${serv.duration ? `Duratio
                           >
                             <motion.div variants={premiumItemVariants} className="text-center space-y-2">
                               <span className="text-[10px] uppercase tracking-widest font-mono text-gray-500 block">Make an Appointment</span>
-                              <h2 className="text-2xl font-semibold text-white tracking-tight">Location & Hours</h2>
+                              <h2 
+                                className="text-2xl font-semibold text-white tracking-tight cursor-pointer hover:opacity-80 transition-opacity"
+                                onClick={(e) => {
+                                  if (!isCustomerOnlyMode) {
+                                    e.preventDefault();
+                                    setActiveStep(1);
+                                    setTimeout(() => document.getElementById("settings-contact")?.scrollIntoView({ behavior: 'smooth' }), 100);
+                                  }
+                                }}
+                                title={!isCustomerOnlyMode ? "Click to edit Contact Info" : ""}
+                              >Location & Hours</h2>
                               <div className="w-12 h-1 bg-amber-500/20 mx-auto rounded" style={{ backgroundColor: `${siteConfig.primaryColor}30` }} />
                             </motion.div>
 

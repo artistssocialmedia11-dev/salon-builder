@@ -205,7 +205,18 @@ app.post("/api/ai/generate", async (req, res) => {
     let responseSchema: any = undefined;
     let contents: any = "";
 
-    if (type === "tagline") {
+    if (type === "shopName") {
+      systemInstruction = "You are a luxury branding expert. Generate a single, highly unique, and elegant name for a new luxury salon, spa, or beauty boutique.";
+      prompt = `Generate a luxury salon brand name based on this description: ${query || "Luxury skincare and hair styling"}. Tone style: ${style || "elegant and modern"}. Output ONLY the name, nothing else.`;
+      contents = prompt;
+      responseSchema = {
+        type: Type.OBJECT,
+        properties: {
+          shopName: { type: Type.STRING, description: "The beautiful generated luxury brand name." }
+        },
+        required: ["shopName"]
+      };
+    } else if (type === "tagline") {
       systemInstruction = "You are a luxury salon copywriter. Create beautiful, professional, and elegant tagline options for a high-end salon website. The tagline should be brief (1 sentence, max 10 words).";
       prompt = `Generate a salon tagline option for a salon named "${salonName || "Nexora"}". Vibe or description: ${query || "Luxury skincare and hair styling"}. Tone style: ${style || "elegant"}.`;
       contents = prompt;
