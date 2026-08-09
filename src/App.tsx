@@ -694,6 +694,7 @@ export default function App() {
   const teamImgInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const testimonialAvatarInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const backupFileInputRef = useRef<HTMLInputElement>(null);
+  const previewContainerRef = useRef<HTMLDivElement>(null);
 
   // Sync draft edits to local storage for premium auto-save experience
   useEffect(() => {
@@ -720,6 +721,53 @@ export default function App() {
       setSidebarOpen(true);
     }
   }, [activeMobileTab]);
+
+  // Auto-scroll live preview to the active section being edited in the sidebar
+  useEffect(() => {
+    if (isCustomerOnlyMode || !sidebarOpen) return;
+
+    const sectionMap: Record<string, string> = {
+      "settings-subdomain": "sec-hero",
+      "settings-hero": "sec-hero",
+      "settings-about": "sec-about",
+      "settings-services": "sec-services",
+      "settings-staff": "sec-team",
+      "settings-gallery": "sec-gallery",
+      "settings-reviews": "sec-testimonials",
+      "settings-contact": "sec-contact",
+      "settings-announcement": "sec-hero",
+    };
+
+    const targets = Object.keys(sectionMap);
+    let focusedId: string | null = null;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        let best: Element | null = null;
+        let bestRatio = 0;
+        for (const e of entries) {
+          if (e.isIntersecting && e.intersectionRatio > bestRatio) {
+            bestRatio = e.intersectionRatio;
+            best = e.target;
+          }
+        }
+        if (!best) return;
+        const secId = sectionMap[(best as HTMLElement).id];
+        if (!secId || secId === focusedId) return;
+        focusedId = secId;
+        const previewSection = previewContainerRef.current?.querySelector(`#${secId}`);
+        previewSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+      },
+      { threshold: [0, 0.1, 0.25, 0.5] }
+    );
+
+    targets.forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) observer.observe(el);
+    });
+
+    return () => observer.disconnect();
+  }, [isCustomerOnlyMode, sidebarOpen, activeStep, siteConfig.sections]);
 
   // Fetch published showcases on mount & check for URL shared state
   useEffect(() => {
@@ -4898,6 +4946,7 @@ export default function App() {
 
               {/* CUSTOMER FRONTEND SIMULATOR BODY */}
               <div
+                ref={previewContainerRef}
                 className={`flex-1 overflow-y-auto customer-preview-container ${activeFontClass()} selection:bg-amber-100 selection:text-black ${
                   (siteConfig.animations as any)?.smoothScroll ? "scroll-smooth" : ""
                 }`}
@@ -5095,6 +5144,7 @@ export default function App() {
                         return (
                           <motion.section
                             key="sec-hero"
+                            id="sec-hero"
                             variants={premiumContainerVariants}
                             initial="hidden"
                             whileInView="visible"
@@ -5196,7 +5246,7 @@ export default function App() {
                                     {siteConfig.heroCtaText || "Book Appointment"}
                                   </button>
                                   <a
-                                    href="#services-section"
+                                    href="#sec-services"
                                     className={`px-5 py-2.5 text-xs text-center font-bold text-white border inline-block customer-btn ${
                                       siteConfig.animations?.hoverEffects ? "hover:bg-white/10 transition-colors duration-300" : "transition-none"
                                     } ${
@@ -5218,6 +5268,7 @@ export default function App() {
                         return (
                           <motion.section
                             key="sec-about"
+                            id="sec-about"
                             variants={premiumContainerVariants}
                             initial="hidden"
                             whileInView="visible"
@@ -5249,8 +5300,8 @@ export default function App() {
                         const sLayoutStyle = siteConfig.layoutStyle || "luxury";
                         return (
                           <motion.section
-                            id="services-section"
-                            key="sec-services"
+                              key="sec-services"
+                              id="sec-services"
                             variants={premiumContainerVariants}
                             initial="hidden"
                             whileInView="visible"
@@ -5423,6 +5474,7 @@ ${serv.category ? `Category: ${serv.category}\n` : ""}${serv.duration ? `Duratio
                         return (
                           <motion.section
                             key="sec-team"
+                            id="sec-team"
                             variants={premiumContainerVariants}
                             initial="hidden"
                             whileInView="visible"
@@ -5538,6 +5590,7 @@ ${serv.category ? `Category: ${serv.category}\n` : ""}${serv.duration ? `Duratio
                         return (
                           <motion.section
                             key="sec-testimonials"
+                            id="sec-testimonials"
                             variants={premiumContainerVariants}
                             initial="hidden"
                             whileInView="visible"
@@ -5609,6 +5662,7 @@ ${serv.category ? `Category: ${serv.category}\n` : ""}${serv.duration ? `Duratio
                         return (
                           <motion.section
                             key="sec-gallery"
+                            id="sec-gallery"
                             variants={premiumContainerVariants}
                             initial="hidden"
                             whileInView="visible"
@@ -5692,6 +5746,7 @@ ${serv.category ? `Category: ${serv.category}\n` : ""}${serv.duration ? `Duratio
                         return (
                           <motion.section
                             key="sec-contact"
+                            id="sec-contact"
                             variants={premiumContainerVariants}
                             initial="hidden"
                             whileInView="visible"
