@@ -2674,6 +2674,7 @@ export default function App() {
                       <p className="text-[9px] text-gray-500 font-mono">Optional: Users click the bar to visit this link</p>
                     </div>
                   </div>
+                </div>
                 </>
               )}
 
@@ -3131,6 +3132,7 @@ export default function App() {
                       <option value="mono">Mono (Space Accent)</option>
                     </select>
                   </div>
+                </div>
                 )}
 
                 {/* SECTION 12: Buttons & Shape Styling */}
@@ -3583,6 +3585,7 @@ export default function App() {
                       Reset to Default
                     </button>
                   </div>
+                </div>
                 </>
               )}
             </div>
