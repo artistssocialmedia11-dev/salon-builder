@@ -4854,13 +4854,13 @@ export default function App() {
             <div
               className={`h-full overflow-hidden flex flex-col transition-all duration-300 ${
                 isCustomerOnlyMode
-                  ? "w-full border-none rounded-none"
+                  ? "w-full h-full border-none rounded-none"
                   : `border border-white/[0.08] bg-[#0E0E0E] rounded-3xl shadow-2xl ${
                       previewDevice === "desktop"
-                        ? "w-full max-w-5xl"
+                        ? "w-full h-full max-w-none"
                         : previewDevice === "tablet"
-                        ? "w-[760px] max-w-full"
-                        : "w-[385px] max-w-full"
+                        ? "w-[760px] max-w-full h-full mx-auto"
+                        : "w-[385px] max-w-full h-full mx-auto"
                     }`
               }`}
             >
