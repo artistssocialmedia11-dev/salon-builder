@@ -109,6 +109,9 @@ export interface WebsiteConfig {
   facebookUrl: string;
   instagramUrl: string;
   youtubeUrl: string;
+  twitterUrl?: string;
+  tiktokUrl?: string;
+  pinterestUrl?: string;
   metaTitle: string;
   metaDescription: string;
   keywords: string;

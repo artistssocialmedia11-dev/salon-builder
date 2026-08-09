@@ -19,6 +19,7 @@ import {
   Facebook,
   Instagram,
   Youtube,
+  Twitter,
   Globe,
   Upload,
   Download,
@@ -186,6 +187,9 @@ const DEFAULT_CONFIG: WebsiteConfig = {
   facebookUrl: "https://facebook.com/nexorasalon",
   instagramUrl: "https://instagram.com/nexorasalon",
   youtubeUrl: "https://youtube.com/nexorasalon",
+  twitterUrl: "",
+  tiktokUrl: "",
+  pinterestUrl: "",
   metaTitle: "Nexora Hair & Lounge | West Hollywood Master Styling",
   metaDescription: "Experience bespoke color formulations, luxury balayage designs, and scalp detox treatments inside West Hollywood's premier botanical retreat.",
   keywords: "salon, hair stylist, balayage, botanical hair, west hollywood hair",
@@ -1633,6 +1637,115 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* BRAND ASSETS CARD: HERO BANNER */}
+                <div className="bg-[#111] border border-white/[0.04] rounded-xl p-4 space-y-4 shadow-xl">
+                  <div className="flex items-center justify-between pb-2 border-b border-white/[0.04]">
+                    <span className="text-[11.5px] font-mono uppercase text-[#D4AF37] font-semibold tracking-wider">Hero Background Image</span>
+                    {siteConfig.banner && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSiteConfig(prev => ({ ...prev, banner: "" }));
+                          notifyShort("Removed custom background image.");
+                        }}
+                        className="text-[10px] text-red-400 hover:text-red-300 font-semibold flex items-center gap-1 transition-colors"
+                      >
+                        Remove Image
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Current Image Preview or Upload Dropzone */}
+                  {siteConfig.banner ? (
+                    <div className="relative group rounded-xl overflow-hidden border border-white/10 bg-black/40 h-32 flex items-center justify-center">
+                      <img 
+                        src={siteConfig.banner} 
+                        alt="Current Banner" 
+                        className="w-full h-full object-cover opacity-85 group-hover:scale-105 transition-all duration-500" 
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2 transition-all duration-300">
+                        <button
+                          type="button"
+                          onClick={() => bannerInputRef.current?.click()}
+                          className="px-3 py-1.5 bg-[#D4AF37] text-black text-[10px] font-bold rounded-lg hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                        >
+                          Replace Image
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => bannerInputRef.current?.click()}
+                      className="w-full h-32 border border-dashed border-white/10 hover:border-[#D4AF37]/40 rounded-xl bg-black/40 hover:bg-black/60 flex flex-col items-center justify-center gap-2 transition-all group cursor-pointer"
+                    >
+                      <Upload className="w-5 h-5 text-gray-400 group-hover:text-[#D4AF37] transition-colors" />
+                      <div className="text-center">
+                        <p className="text-[11px] font-semibold text-gray-300 group-hover:text-white transition-colors">Upload Custom Image</p>
+                        <p className="text-[9px] text-gray-500 font-mono mt-0.5">High-res PNG, JPG or WEBP (16:9 recommended)</p>
+                      </div>
+                    </button>
+                  )}
+
+                  {/* Hidden File Input */}
+                  <input
+                    type="file"
+                    ref={bannerInputRef}
+                    onChange={handleBannerUpload}
+                    accept="image/*"
+                    className="hidden"
+                  />
+
+                  {/* Premium Unsplash Presets */}
+                  <div className="space-y-2 pt-1">
+                    <span className="block text-[10px] font-mono text-gray-500 uppercase">Or select a premium salon preset:</span>
+                    <div className="grid grid-cols-4 gap-2">
+                      {[
+                        {
+                          name: "Minimalist",
+                          url: "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=800&q=80"
+                        },
+                        {
+                          name: "Luxury Gold",
+                          url: "https://images.unsplash.com/photo-1521590832167-7bcbfaa6381f?auto=format&fit=crop&w=800&q=80"
+                        },
+                        {
+                          name: "Serene Spa",
+                          url: "https://images.unsplash.com/photo-1600334089648-b0d9d3028eb2?auto=format&fit=crop&w=800&q=80"
+                        },
+                        {
+                          name: "Elegant Studio",
+                          url: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=800&q=80"
+                        }
+                      ].map((preset) => (
+                        <button
+                          key={preset.name}
+                          type="button"
+                          onClick={() => {
+                            setSiteConfig(prev => ({ ...prev, banner: preset.url }));
+                            notifyShort(`Selected "${preset.name}" preset background!`);
+                          }}
+                          className={`relative aspect-video rounded-lg overflow-hidden border transition-all hover:scale-105 active:scale-95 cursor-pointer ${
+                            siteConfig.banner === preset.url ? "border-[#D4AF37] ring-1 ring-[#D4AF37]/50" : "border-white/5 hover:border-white/20"
+                          }`}
+                          title={`Set "${preset.name}" background`}
+                        >
+                          <img 
+                            src={preset.url} 
+                            alt={preset.name} 
+                            className="w-full h-full object-cover" 
+                            referrerPolicy="no-referrer"
+                          />
+                          <div className="absolute inset-x-0 bottom-0 bg-black/70 py-0.5 text-[8px] text-center text-gray-300 font-mono">
+                            {preset.name}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
                 {/* TAGLINE & AI */}
                 <div className="bg-[#111] border border-white/[0.04] rounded-xl p-4 space-y-4">
                   <div className="flex items-center justify-between">
@@ -1790,114 +1903,7 @@ export default function App() {
                       />
                     </div>
 
-                    {/* Hero Background Image Settings */}
-                    <div className="border-t border-white/[0.04] pt-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <label className="block text-[10px] font-mono text-gray-500 uppercase">Hero Background Image</label>
-                        {siteConfig.banner && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSiteConfig(prev => ({ ...prev, banner: "" }));
-                              notifyShort("Removed custom background image.");
-                            }}
-                            className="text-[10px] text-red-400 hover:text-red-300 font-semibold flex items-center gap-1 transition-colors"
-                          >
-                            Remove Image
-                          </button>
-                        )}
-                      </div>
 
-                      {/* Current Image Preview or Upload Dropzone */}
-                      {siteConfig.banner ? (
-                        <div className="relative group rounded-xl overflow-hidden border border-white/10 bg-black/40 h-32 flex items-center justify-center">
-                          <img 
-                            src={siteConfig.banner} 
-                            alt="Current Banner" 
-                            className="w-full h-full object-cover opacity-85 group-hover:scale-105 transition-all duration-500" 
-                            referrerPolicy="no-referrer"
-                          />
-                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2 transition-all duration-300">
-                            <button
-                              type="button"
-                              onClick={() => bannerInputRef.current?.click()}
-                              className="px-3 py-1.5 bg-[#D4AF37] text-black text-[10px] font-bold rounded-lg hover:scale-105 active:scale-95 transition-all cursor-pointer"
-                            >
-                              Replace Image
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => bannerInputRef.current?.click()}
-                          className="w-full h-32 border border-dashed border-white/10 hover:border-[#D4AF37]/40 rounded-xl bg-black/40 hover:bg-black/60 flex flex-col items-center justify-center gap-2 transition-all group cursor-pointer"
-                        >
-                          <Upload className="w-5 h-5 text-gray-400 group-hover:text-[#D4AF37] transition-colors" />
-                          <div className="text-center">
-                            <p className="text-[11px] font-semibold text-gray-300 group-hover:text-white transition-colors">Upload Custom Image</p>
-                            <p className="text-[9px] text-gray-500 font-mono mt-0.5">High-res PNG, JPG or WEBP (16:9 recommended)</p>
-                          </div>
-                        </button>
-                      )}
-
-                      {/* Hidden File Input */}
-                      <input
-                        type="file"
-                        ref={bannerInputRef}
-                        onChange={handleBannerUpload}
-                        accept="image/*"
-                        className="hidden"
-                      />
-
-                      {/* Premium Unsplash Presets */}
-                      <div className="space-y-2 pt-1">
-                        <span className="block text-[10px] font-mono text-gray-500 uppercase">Or select a premium salon preset:</span>
-                        <div className="grid grid-cols-4 gap-2">
-                          {[
-                            {
-                              name: "Minimalist",
-                              url: "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=800&q=80"
-                            },
-                            {
-                              name: "Luxury Gold",
-                              url: "https://images.unsplash.com/photo-1521590832167-7bcbfaa6381f?auto=format&fit=crop&w=800&q=80"
-                            },
-                            {
-                              name: "Serene Spa",
-                              url: "https://images.unsplash.com/photo-1600334089648-b0d9d3028eb2?auto=format&fit=crop&w=800&q=80"
-                            },
-                            {
-                              name: "Elegant Studio",
-                              url: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=800&q=80"
-                            }
-                          ].map((preset) => (
-                            <button
-                              key={preset.name}
-                              type="button"
-                              onClick={() => {
-                                setSiteConfig(prev => ({ ...prev, banner: preset.url }));
-                                notifyShort(`Selected "${preset.name}" preset background!`);
-                              }}
-                              className={`relative aspect-video rounded-lg overflow-hidden border transition-all hover:scale-105 active:scale-95 cursor-pointer ${
-                                siteConfig.banner === preset.url ? "border-[#D4AF37] ring-1 ring-[#D4AF37]/50" : "border-white/5 hover:border-white/20"
-                              }`}
-                              title={`Set "${preset.name}" background`}
-                            >
-                              <img 
-                                src={preset.url} 
-                                alt={preset.name} 
-                                className="w-full h-full object-cover" 
-                                referrerPolicy="no-referrer"
-                              />
-                              <div className="absolute inset-x-0 bottom-0 bg-black/70 py-0.5 text-[8px] text-center text-gray-300 font-mono">
-                                {preset.name}
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
 
                   </div>
                 </div>
@@ -3789,43 +3795,37 @@ export default function App() {
                 {/* Social media presence */}
                 <div className="bg-[#111] border border-white/[0.04] p-4 rounded-xl space-y-3">
                   <h3 className="text-xs font-mono uppercase text-gray-400 border-b border-white/[0.04] pb-2">Sociability Accounts</h3>
+                  <p className="text-[10px] text-gray-500 mb-2">Enter your full URL or just your @handle. Handles will be automatically converted to links.</p>
 
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-[9px] font-mono uppercase text-gray-500 mb-1 flex items-center gap-1">
-                        <Instagram className="w-3 h-3 text-[#D4AF37]" /> Instagram
-                      </label>
-                      <input
-                        type="text"
-                        className="w-full bg-black border border-white/[0.08] focus:border-[#D4AF37] text-xs text-white rounded px-2.5 py-1.5"
-                        value={siteConfig.instagramUrl}
-                        onChange={e => setSiteConfig(prev => ({ ...prev, instagramUrl: e.target.value }))}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[9px] font-mono uppercase text-gray-500 mb-1 flex items-center gap-1">
-                        <Facebook className="w-3 h-3 text-[#D4AF37]" /> Facebook
-                      </label>
-                      <input
-                        type="text"
-                        className="w-full bg-black border border-white/[0.08] focus:border-[#D4AF37] text-xs text-white rounded px-2.5 py-1.5"
-                        value={siteConfig.facebookUrl}
-                        onChange={e => setSiteConfig(prev => ({ ...prev, facebookUrl: e.target.value }))}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[9px] font-mono uppercase text-gray-500 mb-1 flex items-center gap-1">
-                        <Youtube className="w-3 h-3 text-[#D4AF37]" /> YouTube
-                      </label>
-                      <input
-                        type="text"
-                        className="w-full bg-black border border-white/[0.08] focus:border-[#D4AF37] text-xs text-white rounded px-2.5 py-1.5"
-                        value={siteConfig.youtubeUrl}
-                        onChange={e => setSiteConfig(prev => ({ ...prev, youtubeUrl: e.target.value }))}
-                      />
-                    </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { id: 'instagramUrl', label: 'Instagram', icon: <Instagram className="w-3 h-3 text-[#D4AF37]" />, domain: 'instagram.com' },
+                      { id: 'facebookUrl', label: 'Facebook', icon: <Facebook className="w-3 h-3 text-[#D4AF37]" />, domain: 'facebook.com' },
+                      { id: 'twitterUrl', label: 'Twitter / X', icon: <Twitter className="w-3 h-3 text-[#D4AF37]" />, domain: 'twitter.com' },
+                      { id: 'youtubeUrl', label: 'YouTube', icon: <Youtube className="w-3 h-3 text-[#D4AF37]" />, domain: 'youtube.com' },
+                      { id: 'tiktokUrl', label: 'TikTok', icon: <span className="text-[#D4AF37] font-bold text-[10px]">♪</span>, domain: 'tiktok.com/@' },
+                      { id: 'pinterestUrl', label: 'Pinterest', icon: <span className="text-[#D4AF37] font-bold text-[10px]">P</span>, domain: 'pinterest.com' },
+                    ].map((platform) => (
+                      <div key={platform.id}>
+                        <label className="block text-[9px] font-mono uppercase text-gray-500 mb-1 flex items-center gap-1">
+                          {platform.icon} {platform.label}
+                        </label>
+                        <input
+                          type="text"
+                          placeholder={`@your${platform.label.toLowerCase().replace(/ \/ x/, '')}`}
+                          className="w-full bg-black border border-white/[0.08] focus:border-[#D4AF37] text-xs text-white rounded px-2.5 py-1.5"
+                          value={(siteConfig as any)[platform.id] || ''}
+                          onChange={e => setSiteConfig(prev => ({ ...prev, [platform.id]: e.target.value }))}
+                          onBlur={e => {
+                            const val = e.target.value.trim();
+                            if (val && !val.startsWith('http')) {
+                              const handle = val.replace(/^@/, '');
+                              setSiteConfig(prev => ({ ...prev, [platform.id]: `https://${platform.domain}/${handle}` }));
+                            }
+                          }}
+                        />
+                      </div>
+                    ))}
                   </div>
                 </div>
 
@@ -5325,9 +5325,24 @@ ${serv.category ? `Category: ${serv.category}\n` : ""}${serv.duration ? `Duratio
                           <Facebook className="w-3.5 h-3.5" />
                         </a>
                       )}
+                      {siteConfig.twitterUrl && (
+                        <a href={siteConfig.twitterUrl} className="p-2 border border-current opacity-30 hover:opacity-100 rounded-full transition-all flex items-center justify-center" title="Twitter / X">
+                          <Twitter className="w-3.5 h-3.5" />
+                        </a>
+                      )}
                       {siteConfig.youtubeUrl && (
                         <a href={siteConfig.youtubeUrl} className="p-2 border border-current opacity-30 hover:opacity-100 rounded-full transition-all" title="YouTube">
                           <Youtube className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                      {siteConfig.tiktokUrl && (
+                        <a href={siteConfig.tiktokUrl} className="w-[34px] h-[34px] border border-current opacity-30 hover:opacity-100 rounded-full transition-all flex items-center justify-center" title="TikTok">
+                          <span className="font-bold text-[13px] leading-none mb-0.5">♪</span>
+                        </a>
+                      )}
+                      {siteConfig.pinterestUrl && (
+                        <a href={siteConfig.pinterestUrl} className="w-[34px] h-[34px] border border-current opacity-30 hover:opacity-100 rounded-full transition-all flex items-center justify-center" title="Pinterest">
+                          <span className="font-bold text-[13px] leading-none">P</span>
                         </a>
                       )}
                     </div>
