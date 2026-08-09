@@ -9,7 +9,7 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 
 // Initialize Gemini SDK with telemetry header
 const ai = process.env.GEMINI_API_KEY
@@ -352,6 +352,39 @@ app.post("/api/ai/generate", async (req, res) => {
   } catch (err: any) {
     console.error("AI Generation error:", err);
     res.status(500).json({ error: err?.message || "Error generating copy from Gemini API." });
+  }
+});
+
+// API Route: AI Voice-to-Text Parsing
+app.post("/api/voice-to-text", async (req, res) => {
+  if (!ai) {
+    return res.status(500).json({
+      error: "Gemini API Key is not configured on the server.",
+    });
+  }
+
+  const { audioData, mimeType } = req.body;
+
+  try {
+    const audioPart = {
+      inlineData: {
+        mimeType,
+        data: audioData,
+      },
+    };
+    
+    const response = await ai.models.generateContent({
+      model: "gemini-3.6-flash",
+      contents: [
+        audioPart,
+        { text: "Transcribe this audio clip into text. Output ONLY the transcribed text." }
+      ],
+    });
+
+    res.json({ success: true, text: response.text });
+  } catch (err: any) {
+    console.error("Voice-to-Text error:", err);
+    res.status(500).json({ error: err?.message || "Error transcribing audio." });
   }
 });
 

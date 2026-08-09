@@ -116,6 +116,9 @@ export interface WebsiteConfig {
   metaTitle: string;
   metaDescription: string;
   keywords: string;
+  ogTitle?: string;
+  ogDescription?: string;
+  ogImage?: string;
   heroHeadline?: string;
   heroSubHeadline?: string;
   heroCtaText?: string;

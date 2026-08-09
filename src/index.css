@@ -2,7 +2,8 @@
 @import "tailwindcss";
 
 @layer base {
-  body {
+  html, body {
+    overflow-x: hidden;
     background-color: #0d0d0d;
     color: #f3f4f6;
     font-family: 'Inter', system-ui, sans-serif;
@@ -35,4 +36,10 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #444;
+}
+
+div#root:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(4) {
+  pointer-events: auto;
+  position: relative;
+  z-index: 100;
 }

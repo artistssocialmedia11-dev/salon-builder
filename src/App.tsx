@@ -18,6 +18,7 @@ import {
   MessageSquare,
   Facebook,
   Instagram,
+  Hand,
   Youtube,
   Twitter,
   Globe,
@@ -37,7 +38,7 @@ import {
   Copy,
   Palette,
   X,
-  Settings,
+  Settings, Crop, Edit2,
   Scissors,
   Eye,
   EyeOff,
@@ -47,7 +48,9 @@ import {
 } from "lucide-react";
 import { Reorder, useDragControls } from "motion/react";
 import { ServicesManagementPanel } from "./components/ServicesManagementPanel";
+import { MobileBottomNav } from "./components/MobileBottomNav";
 import { ImageCropperModal } from "./components/ImageCropperModal";
+import { VoiceRecorder } from "./components/VoiceRecorder";
 import { WebsiteConfig, SalonService, TeamMember, Testimonial, HomepageSection } from "./types";
 
 /* ------------------------------------------------------------------ */
@@ -373,6 +376,79 @@ const HelpTooltip = ({ text }: { text: string }) => {
   );
 };
 
+// Utility to extract colors from an image using canvas
+const extractColorsFromImage = (file: File): Promise<{ dominant: string, palette: string[] }> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject("No canvas context");
+            return;
+          }
+          
+          canvas.width = img.width;
+          canvas.height = img.height;
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+          const colorCounts: { [key: string]: number } = {};
+          let maxCount = 0;
+          let dominantRGB = { r: 0, g: 0, b: 0 };
+          
+          const step = Math.max(4, Math.ceil(imageData.length / 4 / 2000) * 4); 
+          
+          for (let i = 0; i < imageData.length; i += step) {
+            const r = imageData[i];
+            const g = imageData[i + 1];
+            const b = imageData[i + 2];
+            const a = imageData[i + 3];
+            
+            if (a < 128) continue; 
+            
+            const qr = Math.floor(r / 16) * 16;
+            const qg = Math.floor(g / 16) * 16;
+            const qb = Math.floor(b / 16) * 16;
+            
+            const rgbString = `${qr},${qg},${qb}`;
+            colorCounts[rgbString] = (colorCounts[rgbString] || 0) + 1;
+            
+            if (colorCounts[rgbString] > maxCount) {
+              maxCount = colorCounts[rgbString];
+              dominantRGB = { r, g, b }; 
+            }
+          }
+          
+          const rgbToHex = (r: number, g: number, b: number) => '#' + [r, g, b].map(x => {
+            const hex = x.toString(16);
+            return hex.length === 1 ? '0' + hex : hex;
+          }).join('');
+          
+          const dominantHex = rgbToHex(dominantRGB.r, dominantRGB.g, dominantRGB.b);
+          
+          const sortedColors = Object.entries(colorCounts).sort((a, b) => b[1] - a[1]);
+          const palette = sortedColors.slice(0, 5).map(c => {
+            const [r, g, b] = c[0].split(',').map(Number);
+            return rgbToHex(r, g, b);
+          });
+          
+          resolve({ dominant: dominantHex, palette: palette });
+        } catch (err) {
+          reject(err);
+        }
+      };
+      img.onerror = reject;
+      img.src = event.target?.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+};
+
 export default function App() {
   // Config states
   const [siteConfig, setSiteConfig] = useState<WebsiteConfig>(() => {
@@ -530,9 +606,38 @@ export default function App() {
 
   // DB Showcase lists
   const [publishedSites, setPublishedSites] = useState<any[]>([]);
+  const [isSmartThemeSyncEnabled, setIsSmartThemeSyncEnabled] = useState(false);
+  const [activeMobileTab, setActiveMobileTab] = useState<string | null>(null);
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
+  const [isInteracted, setIsInteracted] = useState(false);
   const [activeStep, setActiveStep] = useState<number>(1);
   const [isCustomerOnlyMode, setIsCustomerOnlyMode] = useState<boolean>(false);
+  const paletteImageRef = useRef<HTMLInputElement>(null);
+
+  const [isExtractingColors, setIsExtractingColors] = useState<boolean>(false);
+  const [extractedPalettePreview, setExtractedPalettePreview] = useState<{
+    palette: string[];
+    buttonIndex: number;
+    backgroundIndex: number;
+  } | null>(null);
+
+  // Sync theme colors with extracted palette if enabled
+  useEffect(() => {
+    if (isSmartThemeSyncEnabled && extractedPalettePreview) {
+      const palette = extractedPalettePreview.palette;
+      const bg = palette[extractedPalettePreview.backgroundIndex];
+      const btn = palette[extractedPalettePreview.buttonIndex];
+      
+      setSiteConfig(prev => ({
+        ...prev,
+        primaryColor: btn,
+        secondaryColor: bg,
+        buttonColor: btn,
+        backgroundColor: bg,
+        textColor: getContrastRatio('#ffffff', bg) > 4.5 ? '#ffffff' : '#000000',
+      }));
+    }
+  }, [isSmartThemeSyncEnabled, extractedPalettePreview]);
   
   // Booking Simulator States
   const [settingsActiveDate, setSettingsActiveDate] = useState<string>(() => {
@@ -546,7 +651,7 @@ export default function App() {
   // Image Cropper States
   const [cropperOpen, setCropperOpen] = useState<boolean>(false);
   const [cropperSrc, setCropperSrc] = useState<string>("");
-  const [cropperType, setCropperType] = useState<"logo" | "banner" | "gallery" | "team" | "testimonial">("logo");
+  const [cropperType, setCropperType] = useState<"logo" | "banner" | "gallery" | "team" | "testimonial" | "gallery-edit">("logo");
   const [cropperTargetId, setCropperTargetId] = useState<string>("");
   const [bookingSelectedServiceId, setBookingSelectedServiceId] = useState<string>("");
   const [bookingSelectedStaffId, setBookingSelectedStaffId] = useState<string>("any");
@@ -596,6 +701,25 @@ export default function App() {
       localStorage.setItem("nexora_draft_site", JSON.stringify(siteConfig));
     }
   }, [siteConfig, isCustomerOnlyMode]);
+
+  // Sync mobile nav tabs with workspace panels
+  useEffect(() => {
+    if (!activeMobileTab || activeMobileTab === 'preview') {
+      setSidebarOpen(false);
+    } else if (activeMobileTab === 'content') {
+      setActiveStep(1);
+      setSidebarOpen(true);
+    } else if (activeMobileTab === 'theme') {
+      setActiveStep(2);
+      setSidebarOpen(true);
+    } else if (activeMobileTab === 'services') {
+      setActiveStep(3);
+      setSidebarOpen(true);
+    } else if (activeMobileTab === 'publish') {
+      setActiveStep(4);
+      setSidebarOpen(true);
+    }
+  }, [activeMobileTab]);
 
   // Fetch published showcases on mount & check for URL shared state
   useEffect(() => {
@@ -772,9 +896,44 @@ export default function App() {
         gallery: [...prev.gallery, croppedUrl]
       }));
       notifyShort("Added cropped photo to style portfolio!");
+    } else if (cropperType === "gallery-edit") {
+      setSiteConfig(prev => {
+        const newGallery = [...prev.gallery];
+        const targetIdx = parseInt(cropperTargetId);
+        if (!isNaN(targetIdx) && targetIdx >= 0 && targetIdx < newGallery.length) {
+          newGallery[targetIdx] = croppedUrl;
+        }
+        return { ...prev, gallery: newGallery };
+      });
+      notifyShort("Updated portfolio photo!");
     }
     setCropperOpen(false);
     setCropperSrc("");
+  };
+
+  const handleExtractPaletteFromImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsExtractingColors(true);
+    try {
+      const { dominant, palette } = await extractColorsFromImage(file);
+      
+      const fullPalette = [dominant, ...palette.filter(c => c !== dominant)].slice(0, 5);
+      
+      setExtractedPalettePreview({
+        palette: fullPalette,
+        buttonIndex: 0,
+        backgroundIndex: fullPalette.length > 1 ? 1 : 0
+      });
+      notifyShort("Palette extracted! Adjust the preview.");
+    } catch (err) {
+      console.error(err);
+      notifyShort("Failed to extract colors. Ensure the image is valid.");
+    } finally {
+      setIsExtractingColors(false);
+      e.target.value = "";
+    }
   };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -847,6 +1006,28 @@ export default function App() {
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const handleReplaceGalleryImage = (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCropperSrc(reader.result as string);
+        setCropperType("gallery-edit");
+        setCropperTargetId(index.toString());
+        setCropperOpen(true);
+        e.target.value = "";
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleEditGalleryImage = (imgUrl: string, index: number) => {
+    setCropperSrc(imgUrl);
+    setCropperType("gallery-edit");
+    setCropperTargetId(index.toString());
+    setCropperOpen(true);
   };
 
   const removeGalleryImage = (index: number) => {
@@ -958,10 +1139,12 @@ export default function App() {
   };
 
   const generateAllImageAltCaptions = async () => {
+    console.log("generateAllImageAltCaptions called");
     if (!siteConfig.gallery || siteConfig.gallery.length === 0) {
       notifyShort("No images to process.");
       return;
     }
+    console.log("siteConfig.gallery length:", siteConfig.gallery.length);
 
     setAiLoading(prev => ({ ...prev, bulk_alt_caption: true }));
     try {
@@ -975,6 +1158,9 @@ export default function App() {
         await generateImageAltCaption(imgUrl);
       }
       notifyShort("Bulk AI Generation completed!");
+    } catch (err: any) {
+      console.error("Bulk Generation Error:", err);
+      notifyShort(err.message || "Failed to generate image descriptors.");
     } finally {
       setAiLoading(prev => ({ ...prev, bulk_alt_caption: false }));
     }
@@ -1302,7 +1488,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#070707] text-gray-200 flex flex-col font-sans-custom relative overflow-hidden">
+    <div className="min-h-screen bg-[#070707] text-gray-200 flex flex-col font-sans-custom relative overflow-x-hidden w-full max-w-full">
       
       {/* GLOW DECORATIONS */}
       <div className="absolute top-[-300px] left-[-200px] w-[600px] h-[600px] bg-[#D4AF37]/5 blur-[120px] rounded-full pointer-events-none" />
@@ -1318,17 +1504,16 @@ export default function App() {
 
       {/* HEADER BAR */}
       {!isCustomerOnlyMode && (
-        <header className="border-b border-white/[0.05] bg-[#0E0E0E]/90 backdrop-blur-md px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4 z-20">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#d4af37] to-[#9a7b1c] flex items-center justify-center text-[#111] font-bold tracking-wider shadow-lg shadow-[#d4af37]/20">
+        <header className="border-b border-white/[0.05] bg-[#0E0E0E]/90 backdrop-blur-md px-4 py-3 flex flex-wrap items-center justify-between gap-3 z-20">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#d4af37] to-[#9a7b1c] flex items-center justify-center text-[#111] font-bold text-xs tracking-wider shadow-lg shadow-[#d4af37]/20">
               N
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-bold text-white tracking-tight uppercase">Nexora</span>
-                <span className="text-xs bg-[#D4AF37]/10 text-[#D4AF37] border border-[#d4af37]/20 px-2 py-0.5 rounded font-mono">SalonOS</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-bold text-white tracking-tight uppercase">Nexora</span>
               </div>
-              <p className="text-[11px] text-gray-400">Luxury AI Co-Writer & Multi-Device Live Studio</p>
+              <p className="text-[9px] text-gray-500 hidden sm:block">SalonOS Studio</p>
             </div>
           </div>
 
@@ -1352,7 +1537,7 @@ export default function App() {
 
             <button
               onClick={handleRestoreDefaults}
-              className="p-2 text-xs bg-transparent border border-white/[0.08] hover:bg-white/[0.04] hover:text-white rounded-lg transition-all flex items-center gap-1.5"
+              className="w-full flex-shrink-0 p-2 text-xs bg-transparent border border-white/[0.08] hover:bg-white/[0.04] hover:text-white rounded-lg transition-all flex items-center gap-1.5"
               title="Reset sandbox to beautiful default values"
             >
               <RefreshCw className="w-3.5 h-3.5 text-gray-400" />
@@ -1361,7 +1546,7 @@ export default function App() {
 
             <button
               onClick={handleDownloadBackup}
-              className="p-2 text-xs bg-transparent border border-white/[0.08] hover:bg-white/[0.04] hover:text-white rounded-lg transition-all flex items-center gap-1.5 cursor-pointer text-gray-300"
+              className="w-full flex-shrink-0 p-2 text-xs bg-transparent border border-white/[0.08] hover:bg-white/[0.04] hover:text-white rounded-lg transition-all flex items-center gap-1.5 cursor-pointer text-gray-300"
               title="Download full configuration JSON file"
             >
               <Download className="w-3.5 h-3.5 text-[#D4AF37]" />
@@ -1370,7 +1555,7 @@ export default function App() {
 
             <button
               onClick={() => backupFileInputRef.current?.click()}
-              className="p-2 text-xs bg-transparent border border-white/[0.08] hover:bg-white/[0.04] hover:text-white rounded-lg transition-all flex items-center gap-1.5 cursor-pointer text-gray-300"
+              className="w-full flex-shrink-0 p-2 text-xs bg-transparent border border-white/[0.08] hover:bg-white/[0.04] hover:text-white rounded-lg transition-all flex items-center gap-1.5 cursor-pointer text-gray-300"
               title="Upload configuration JSON file"
             >
               <Upload className="w-3.5 h-3.5 text-amber-500/85" />
@@ -1387,7 +1572,7 @@ export default function App() {
             <button
               onClick={handlePublishConfig}
               disabled={isPublishing}
-              className="px-4 py-2 text-xs bg-gradient-to-r from-[#D4AF37] to-[#bda03c] hover:opacity-90 active:scale-95 text-black font-semibold rounded-lg shadow-xl shadow-[#D4AF37]/15 transition-all flex items-center gap-2 cursor-pointer"
+              className="w-full flex-shrink-0 px-4 py-2 text-xs bg-gradient-to-r from-[#D4AF37] to-[#bda03c] hover:opacity-90 active:scale-95 text-black font-semibold rounded-lg shadow-xl shadow-[#D4AF37]/15 hover:shadow-[#D4AF37]/30 transition-all duration-200 flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isPublishing ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -1413,9 +1598,14 @@ export default function App() {
 
       {/* MOBILE BUILDER TOGGLE */}
       {!isCustomerOnlyMode && (
-        <div className="fixed bottom-6 right-6 z-[60] lg:hidden">
+        <div className="fixed bottom-6 right-6 z-[55] lg:hidden">
           <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
+            onClick={() => {
+              const newState = !sidebarOpen;
+              setSidebarOpen(newState);
+              if (!newState) setActiveMobileTab('preview');
+              else if (activeMobileTab === 'preview') setActiveMobileTab('content');
+            }}
             className={`w-14 h-14 rounded-full flex items-center justify-center shadow-2xl transition-all active:scale-95 ${
               sidebarOpen ? 'bg-red-500 rotate-[135deg]' : 'bg-[#D4AF37] text-black shadow-[#D4AF37]/30'
             }`}
@@ -1426,112 +1616,157 @@ export default function App() {
       )}
 
       {/* CORE WORKSPACE */}
-      <main className="flex-1 flex flex-col lg:flex-row min-h-0 relative z-10 overflow-hidden">
+      <main className="flex-1 flex flex-col lg:flex-row min-h-0 relative z-10 overflow-x-hidden pb-20 lg:pb-0">
         
+        {/* Mobile Drawer Backdrop */}
+        {!isCustomerOnlyMode && sidebarOpen && (
+          <div 
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
+            onClick={() => {
+              setSidebarOpen(false);
+              setActiveMobileTab(null);
+            }}
+          />
+        )}
+
         {/* LEFT COLUMN: THE ATELIER CONTROL BOARD */}
         {!isCustomerOnlyMode && (
-          <section className={`fixed inset-0 lg:relative z-40 lg:z-auto w-full lg:w-[480px] border-r border-white/[0.05] bg-[#0A0A0A] flex flex-col h-full scroll-smooth transition-transform duration-300 transform ${
-            sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+          <section className={`fixed bottom-0 left-0 right-0 max-h-[80vh] overflow-y-auto rounded-t-2xl lg:rounded-none lg:relative lg:top-0 lg:h-full lg:w-[480px] z-50 lg:z-auto border-t lg:border-t-0 lg:border-r border-white/[0.05] bg-slate-900 lg:bg-[#0A0A0A] text-white flex flex-col transition-transform duration-300 shadow-2xl pb-24 transform ${
+            sidebarOpen ? 'translate-y-0' : 'translate-y-full lg:translate-y-0 lg:translate-x-0'
           }`}>
           
-          {/* Quick Stats & Subdomain Info */}
-          <div className="p-4 border-b border-white/[0.05] bg-[#0E0E0E]/80 space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-[11px] font-mono tracking-wider uppercase text-gray-500">Live Workspace Status</span>
-              <span className="inline-flex items-center gap-1.5 text-[10px] bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/20 px-2 py-0.5 rounded-full font-semibold">
-                <span className="w-1.5 h-1.5 bg-[#D4AF37] rounded-full animate-pulse" />
-                DRAFT AUTO-SAVED
-              </span>
-            </div>
-
-            <div className="space-y-2 bg-black/40 p-2.5 rounded-xl border border-white/[0.03]">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-gray-400 font-medium">Web Address:</span>
-                <span className="text-[10px] text-[#D4AF37] font-semibold">Web Address Status</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-[11px] bg-black px-2 py-1.5 rounded text-gray-300 border border-white/[0.08] truncate flex-1 select-all">
-                  https://{siteConfig.subdomain || "your-subdomain"}.nexorasalonos.com
-                </span>
-                <button
-                  onClick={() => {
-                    const simUrl = `https://${siteConfig.subdomain || "nexora"}.nexorasalonos.com`;
-                    navigator.clipboard.writeText(simUrl);
-                    notifyShort("Simulated custom domain copied!");
-                  }}
-                  className="p-1.5 rounded bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] text-gray-400 hover:text-white transition-all cursor-pointer"
-                  title="Copy simulated custom domain link"
-                >
-                  <Copy className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              <div className="pt-1.5 border-t border-white/[0.04] space-y-1.5">
-                <button
-                  onClick={() => {
-                    const liveUrl = `${window.location.origin}${window.location.pathname}?subdomain=${siteConfig.subdomain || "nexora-lounge"}`;
-                    window.open(liveUrl, "_blank");
-                    notifyShort("Launching live site over secure HTTPS...");
-                  }}
-                  className="w-full py-1.5 px-3 bg-[#D4AF37] hover:bg-[#c29e2f] active:scale-[0.98] transition-all text-black font-bold text-[11px] rounded-lg flex items-center justify-center gap-1.5 shadow-md shadow-[#D4AF37]/10 cursor-pointer"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Launch Live Site (HTTPS)</span>
-                </button>
-                <p className="text-[10px] text-gray-500 leading-normal flex items-start gap-1">
-                  <Info className="w-3 h-3 text-[#D4AF37] shrink-0 mt-0.5" />
-                  <span>
-                    The <code className="text-gray-400">.nexorasalonos.com</code> domain is simulated for branding. Click <strong>Launch Live Site</strong> to view your salon live over actual working secure HTTPS!
+            {/* Quick Stats & Subdomain Info */}
+            {activeMobileTab !== 'theme' && (
+              <div className="p-4 border-b border-white/[0.05] bg-[#0E0E0E]/80 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-[11px] font-mono tracking-wider uppercase text-[#D4AF37] font-bold">
+                    {activeMobileTab === 'theme' ? 'Choose Theme' : 'Live Workspace Status'}
                   </span>
-                </p>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-[10px] bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/20 px-2 py-0.5 rounded-full font-semibold">
+                      <span className="w-1.5 h-1.5 bg-[#D4AF37] rounded-full animate-pulse" />
+                      DRAFT AUTO-SAVED
+                    </span>
+                    <button 
+                      onClick={() => {
+                        setSidebarOpen(false);
+                        setActiveMobileTab(null);
+                      }}
+                      className="lg:hidden p-1 rounded-full hover:bg-white/10 text-gray-400 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2 bg-black/40 p-2.5 rounded-xl border border-white/[0.03]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-gray-400 font-medium">Web Address:</span>
+                    <span className="text-[10px] text-[#D4AF37] font-semibold">Web Address Status</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[11px] bg-black px-2 py-1.5 rounded text-gray-300 border border-white/[0.08] truncate flex-1 select-all">
+                      https://{siteConfig.subdomain || "your-subdomain"}.nexorasalonos.com
+                    </span>
+                    <button
+                      onClick={() => {
+                        const simUrl = `https://${siteConfig.subdomain || "nexora"}.nexorasalonos.com`;
+                        navigator.clipboard.writeText(simUrl);
+                        notifyShort("Simulated custom domain copied!");
+                      }}
+                      className="p-1.5 rounded bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] text-gray-400 hover:text-white transition-all cursor-pointer flex-shrink-0"
+                      title="Copy simulated custom domain link"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="pt-1.5 border-t border-white/[0.04] space-y-1.5">
+                    <button
+                      onClick={() => {
+                        const liveUrl = `${window.location.origin}${window.location.pathname}?subdomain=${siteConfig.subdomain || "nexora-lounge"}`;
+                        window.open(liveUrl, "_blank");
+                        notifyShort("Launching live site over secure HTTPS...");
+                      }}
+                      className="w-full py-1.5 px-3 bg-[#D4AF37] hover:bg-[#c29e2f] active:scale-[0.98] transition-all text-black font-bold text-[11px] rounded-lg flex items-center justify-center gap-1.5 shadow-md shadow-[#D4AF37]/10 cursor-pointer flex-shrink-0"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>Launch Live Site (HTTPS)</span>
+                    </button>
+                    <p className="text-[10px] text-gray-500 leading-normal flex items-start gap-1">
+                      <Info className="w-3 h-3 text-[#D4AF37] shrink-0 mt-0.5" />
+                      <span>
+                        The <code className="text-gray-400">.nexorasalonos.com</code> domain is simulated for branding. Click <strong>Launch Live Site</strong> to view your salon live over actual working secure HTTPS!
+                      </span>
+                    </p>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            )}
+
 
           {/* STEP-BY-STEP ONBOARDING WIZARD */}
-          <nav className="flex flex-col bg-[#0E0E0E]/95 border-b border-white/[0.04] p-3 space-y-3 shrink-0">
-            <div className="flex items-center justify-between">
-              {[
-                { id: 1, name: "Shop Details" },
-                { id: 2, name: "Design & Theme" },
-                { id: 3, name: "Services & Prices" },
-                { id: 4, name: "Publish" }
-              ].map(step => (
-                <button
-                  key={step.id}
-                  onClick={() => setActiveStep(step.id)}
-                  className={`flex flex-col items-center gap-1.5 flex-1 relative ${
-                    activeStep >= step.id ? "text-[#D4AF37]" : "text-gray-600"
-                  }`}
-                >
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold z-10 transition-colors ${
-                    activeStep === step.id ? "bg-[#D4AF37] text-black" :
-                    activeStep > step.id ? "bg-[#D4AF37]/20 border border-[#D4AF37]/50 text-[#D4AF37]" :
-                    "bg-white/[0.02] border border-white/[0.05] text-gray-500"
-                  }`}>
-                    {step.id}
-                  </div>
-                  <span className={`text-[9px] uppercase tracking-wider font-semibold whitespace-nowrap hidden md:block ${
-                    activeStep === step.id ? "text-white" : ""
-                  }`}>
-                    {step.name}
-                  </span>
-                  {/* Progress Line */}
-                  {step.id < 4 && (
-                    <div className="absolute top-3 left-[60%] w-full h-[1px] bg-white/[0.05] -z-0">
-                      <div className="h-full bg-[#D4AF37] transition-all" style={{ width: activeStep > step.id ? "100%" : "0%" }} />
+          {activeMobileTab !== 'theme' && (
+            <nav className="flex flex-col bg-[#0E0E0E]/95 border-b border-white/[0.04] p-3 space-y-3 shrink-0">
+              <div className="flex items-center justify-between">
+                {[
+                  { id: 1, name: "Shop Details" },
+                  { id: 2, name: "Design & Theme" },
+                  { id: 3, name: "Services & Prices" },
+                  { id: 4, name: "Publish" }
+                ].map(step => (
+                  <button
+                    key={step.id}
+                    onClick={() => setActiveStep(step.id)}
+                    className={`flex flex-col items-center gap-1.5 flex-1 relative flex-shrink-0 ${
+                      activeStep >= step.id ? "text-[#D4AF37]" : "text-gray-600"
+                    }`}
+                  >
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold z-10 transition-colors ${
+                      activeStep === step.id ? "bg-[#D4AF37] text-black" :
+                      activeStep > step.id ? "bg-[#D4AF37]/20 border border-[#D4AF37]/50 text-[#D4AF37]" :
+                      "bg-white/[0.02] border border-white/[0.05] text-gray-500"
+                    }`}>
+                      {step.id}
                     </div>
-                  )}
-                </button>
-              ))}
-            </div>
-          </nav>
+                    <span className={`text-[9px] uppercase tracking-wider font-semibold whitespace-nowrap hidden md:block ${
+                      activeStep === step.id ? "text-white" : ""
+                    }`}>
+                      {step.name}
+                    </span>
+                    {/* Progress Line */}
+                    {step.id < 4 && (
+                      <div className="absolute top-3 left-[60%] w-full h-[1px] bg-white/[0.05] -z-0">
+                        <div className="h-full bg-[#D4AF37] transition-all" style={{ width: activeStep > step.id ? "100%" : "0%" }} />
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </nav>
+          )}
 
           {/* ATELIER CONTROLLER SHEETS - SCROLLABLE PANEL */}
-          <div className="flex-1 overflow-y-auto p-5 space-y-6">
+          <div className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-6 pb-24">
+            
+            {activeMobileTab === 'theme' ? (
+              <div className="space-y-6 animate-fadeIn pb-10">
+                <div className="p-3 bg-[#D4AF37]/5 border border-[#D4AF37]/25 rounded-xl space-y-1">
+                  <span className="text-[10px] text-[#D4AF37] uppercase tracking-wider font-bold">Theme Customizer</span>
+                  <p className="text-xs text-gray-300">Quickly swap themes or fine-tune your colors below.</p>
+                </div>
+                
+                {/* PRESETS BLOCK (Referenced by ID for direct scroll if needed) */}
+                <div id="drawer-presets">
+                  {/* Theme Presets content will be duplicated or moved here */}
+                  {/* For simplicity and to avoid huge edits, I'll use a helper or just repeat the code if it's small enough */}
+                  {/* Actually, I'll just show Step 2's theme parts if activeMobileTab is theme */}
+                </div>
+              </div>
+            ) : null}
 
             {/* STEP 1: SHOP DETAILS */}
-            {activeStep === 1 && (
+            {activeStep === 1 && activeMobileTab !== 'theme' && (
               <div className="space-y-6 animate-fadeIn pb-10">
                 <div className="p-3 bg-[#e2cc83]/5 border border-[#e2cc83]/25 rounded-xl space-y-1">
                   <span className="text-[10px] text-[#e2cc83] uppercase tracking-wider font-bold">Step 1: Shop Details</span>
@@ -1556,7 +1791,7 @@ export default function App() {
                         type="button"
                         onClick={() => generateAICopy("shopName")}
                         disabled={aiLoading["shopName"]}
-                        className="px-3 py-2 bg-white/[0.02] hover:bg-[#D4AF37]/10 hover:text-[#D4AF37] border border-white/[0.08] hover:border-[#D4AF37]/35 text-[9px] text-stone-400 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer select-none transition-all disabled:opacity-50"
+                        className="w-full sm:w-auto px-3 py-2 bg-white/[0.02] hover:bg-[#D4AF37]/10 hover:text-[#D4AF37] border border-white/[0.08] hover:border-[#D4AF37]/35 text-[9px] text-stone-400 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer select-none transition-all disabled:opacity-50 flex-shrink-0"
                       >
                         {aiLoading["shopName"] ? (
                           <Loader2 className="w-3.5 h-3.5 animate-spin text-[#D4AF37]" />
@@ -1894,18 +2129,131 @@ export default function App() {
             )}
 
             {/* STEP 2: DESIGN & THEME */}
-            {activeStep === 2 && (
+            {(activeStep === 2 || activeMobileTab === 'theme') && (
               <div className="space-y-5 animate-fadeIn pb-10">
-                <div className="p-3 bg-[#e2cc83]/5 border border-[#e2cc83]/25 rounded-xl space-y-1">
-                  <span className="text-[10px] text-[#e2cc83] uppercase tracking-wider font-bold">Step 2: Design & Theme</span>
-                  <p className="text-xs text-gray-300">Choose your website layout, colors, and fonts.</p>
+                {activeMobileTab !== 'theme' && (
+                  <div className="p-3 bg-[#e2cc83]/5 border border-[#e2cc83]/25 rounded-xl space-y-1">
+                    <span className="text-[10px] text-[#e2cc83] uppercase tracking-wider font-bold">Step 2: Design & Theme</span>
+                    <p className="text-xs text-gray-300">Choose your website layout, colors, and fonts.</p>
+                  </div>
+                )}
+
+                {/* Theme Presets */}
+                <div id="settings-presets" className="bg-[#111] border border-white/[0.04] rounded-xl p-4 space-y-4">
+                  <div className="flex justify-between items-center border-b border-white/[0.04] pb-2">
+                    <span className="text-[11px] font-mono uppercase text-[#D4AF37] font-semibold">Theme Presets</span>
+                    <span className="text-[9px] bg-white/[0.05] text-[#D4AF37] px-1.5 py-0.5 rounded font-mono">1-Click Setup</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {[
+                      {
+                        id: "luxury-black-gold",
+                        name: "Luxury Black & Gold",
+                        primary: "#0F172A",
+                        secondary: "#0F172A",
+                        button: "#EAB308",
+                        accent: "#EAB308",
+                        background: "#020617",
+                        text: "#F8FAFC",
+                        themeMode: "dark" as const,
+                        desc: "Prestige slate and gold."
+                      },
+                      {
+                        id: "clean-rose-white",
+                        name: "Clean Rose & White",
+                        primary: "#FFF1F2",
+                        secondary: "#FFF1F2",
+                        button: "#F43F5E",
+                        accent: "#F43F5E",
+                        background: "#FFFFFF",
+                        text: "#0F172A",
+                        themeMode: "light" as const,
+                        desc: "Modern minimalist rose."
+                      },
+                      {
+                        id: "royal-emerald-slate",
+                        name: "Royal Emerald & Slate",
+                        primary: "#064E3B",
+                        secondary: "#064E3B",
+                        button: "#10B981",
+                        accent: "#10B981",
+                        background: "#022C22",
+                        text: "#FFFFFF",
+                        themeMode: "dark" as const,
+                        desc: "Deep emerald elegance."
+                      }
+                    ].map((preset) => {
+                      const isSelected = siteConfig.primaryColor === preset.primary && siteConfig.accentColor === preset.accent && siteConfig.backgroundColor === preset.background;
+                      return (
+                        <button
+                          key={preset.id}
+                          onClick={() => {
+                            setSiteConfig(prev => ({
+                              ...prev,
+                              primaryColor: preset.primary,
+                              secondaryColor: preset.secondary,
+                              buttonColor: preset.button,
+                              accentColor: preset.accent,
+                              backgroundColor: preset.background,
+                              textColor: preset.text,
+                              themeMode: preset.themeMode
+                            }));
+                          }}
+                          className={`flex items-center gap-4 p-3 rounded-xl border transition-all text-left group ${
+                            isSelected ? 'bg-[#D4AF37]/10 border-[#D4AF37]' : 'bg-black/40 border-white/5 hover:border-[#D4AF37]/30'
+                          }`}
+                        >
+                          <div className="flex -space-x-2">
+                            <div className="w-8 h-8 rounded-full border border-white/10 shadow-sm" style={{ backgroundColor: preset.primary }} />
+                            <div className="w-8 h-8 rounded-full border border-white/10 shadow-sm" style={{ backgroundColor: preset.accent }} />
+                            <div className="w-8 h-8 rounded-full border border-white/10 shadow-sm" style={{ backgroundColor: preset.background }} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold text-white group-hover:text-[#D4AF37] transition-colors">{preset.name}</p>
+                            <p className="text-[10px] text-gray-500 truncate">{preset.desc}</p>
+                          </div>
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors ${
+                            isSelected ? 'bg-[#D4AF37] text-black' : 'bg-white/5 text-gray-400 group-hover:bg-[#D4AF37]/20 group-hover:text-[#D4AF37]'
+                          }`}>
+                            <Palette className="w-3 h-3" />
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Smart Theme Sync Toggle */}
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-black/40 border border-white/5">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isSmartThemeSyncEnabled ? 'bg-[#D4AF37]/20' : 'bg-white/5'}`}>
+                        <Palette className={`w-4 h-4 ${isSmartThemeSyncEnabled ? 'text-[#D4AF37]' : 'text-gray-500'}`} />
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-bold text-white">Smart Theme Sync</p>
+                        <p className="text-[9px] text-gray-500">Auto-harmonize UI to image palette</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setIsSmartThemeSyncEnabled(!isSmartThemeSyncEnabled)}
+                      className={`w-10 h-5 rounded-full p-1 transition-colors ${isSmartThemeSyncEnabled ? 'bg-[#D4AF37]' : 'bg-gray-700'}`}
+                    >
+                      <div className={`w-3 h-3 rounded-full bg-white transition-transform ${isSmartThemeSyncEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                    </button>
+                  </div>
                 </div>
 
                 {/* SECTION 2: Visibility Controls */}
-                <div id="settings-visibility" className="bg-[#111] border border-white/[0.04] rounded-xl p-4 space-y-4 shadow-xl">
+                {activeMobileTab !== 'theme' && (
+                  <div id="settings-visibility" className="bg-[#111] border border-white/[0.04] rounded-xl p-4 space-y-4 shadow-xl">
                   <div className="flex justify-between items-center border-b border-white/[0.04] pb-2">
                     <span className="text-[11.5px] font-mono uppercase text-[#D4AF37] font-semibold tracking-wider">SECTION 2: Visibility Controls</span>
-                    <span className="text-[9px] bg-[#D4AF37]/10 text-[#D4AF37] px-1.5 py-0.5 rounded font-mono">Structural Toggle</span>
+                    <button
+                      onClick={() => setSiteConfig(prev => ({ ...prev, sections: DEFAULT_CONFIG.sections }))}
+                      className="text-[9px] bg-[#D4AF37]/10 text-[#D4AF37] px-2 py-1 rounded font-mono hover:bg-[#D4AF37]/20 transition-all cursor-pointer flex-shrink-0"
+                    >
+                      Reset Layout
+                    </button>
                   </div>
 
                   <div className="space-y-3">
@@ -1926,7 +2274,7 @@ export default function App() {
                               );
                               setSiteConfig(prev => ({ ...prev, sections: newSections }));
                             }}
-                            className={`px-3 py-1 text-[9px] font-bold uppercase rounded ${section.enabled ? "bg-green-500 text-black" : "text-gray-500 hover:text-white"}`}
+                            className={`px-3 py-1 text-[9px] font-bold uppercase rounded flex-shrink-0 ${section.enabled ? "bg-green-500 text-black" : "text-gray-500 hover:text-white"}`}
                           >
                             Enable
                           </button>
@@ -1937,7 +2285,7 @@ export default function App() {
                               );
                               setSiteConfig(prev => ({ ...prev, sections: newSections }));
                             }}
-                            className={`px-3 py-1 text-[9px] font-bold uppercase rounded ${!section.enabled ? "bg-red-500 text-white" : "text-gray-500 hover:text-white"}`}
+                            className={`px-3 py-1 text-[9px] font-bold uppercase rounded flex-shrink-0 ${!section.enabled ? "bg-red-500 text-white" : "text-gray-500 hover:text-white"}`}
                           >
                             Disable
                           </button>
@@ -1946,9 +2294,11 @@ export default function App() {
                     ))}
                   </div>
                 </div>
+              )}
 
                 {/* SECTION 3: Hero Section Settings */}
-                <div id="settings-hero" className="bg-[#111] border border-white/[0.04] rounded-xl p-4 space-y-4 shadow-xl">
+                {activeMobileTab !== 'theme' && (
+                  <div id="settings-hero" className="bg-[#111] border border-white/[0.04] rounded-xl p-4 space-y-4 shadow-xl">
                   <div className="flex justify-between items-center border-b border-white/[0.04] pb-2">
                     <span className="text-[11.5px] font-mono uppercase text-[#D4AF37] font-semibold tracking-wider">SECTION 3: Hero Section Settings</span>
                     <span className="text-[9px] bg-[#D4AF37]/10 text-[#D4AF37] px-1.5 py-0.5 rounded font-mono">Hero Content</span>
@@ -1999,9 +2349,12 @@ export default function App() {
 
                   </div>
                 </div>
+              )}
 
                 {/* SECTION 4: About Section Settings */}
-                <div id="settings-about" className="bg-[#111] border border-white/[0.04] rounded-xl p-4 space-y-4 shadow-xl">
+                {activeMobileTab !== 'theme' && (
+                  <>
+                    <div id="settings-about" className="bg-[#111] border border-white/[0.04] rounded-xl p-4 space-y-4 shadow-xl">
                   <div className="flex justify-between items-center border-b border-white/[0.04] pb-2">
                     <span className="text-[11.5px] font-mono uppercase text-[#D4AF37] font-semibold tracking-wider">SECTION 4: About Section Settings</span>
                     <span className="text-[9px] bg-[#D4AF37]/10 text-[#D4AF37] px-1.5 py-0.5 rounded font-mono">Narrative</span>
@@ -2321,175 +2674,10 @@ export default function App() {
                       <p className="text-[9px] text-gray-500 font-mono">Optional: Users click the bar to visit this link</p>
                     </div>
                   </div>
-                </div>
+                </>
+              )}
 
-                {/* Theme Presets */}
-                <div id="settings-presets" className="bg-[#111] border border-white/[0.04] rounded-xl p-4 space-y-4">
-                  <div className="flex justify-between items-center border-b border-white/[0.04] pb-2">
-                    <span className="text-[11px] font-mono uppercase text-[#D4AF37] font-semibold">Theme Presets</span>
-                    <span className="text-[9px] bg-white/[0.05] text-[#D4AF37] px-1.5 py-0.5 rounded font-mono">Appearance</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {[
-                      {
-                        id: "gold-luxury",
-                        name: "Gold Luxury (Default)",
-                        primary: "#D4AF37",
-                        secondary: "#111111",
-                        button: "#D4AF37",
-                        accent: "#D4AF37",
-                        background: "#111111",
-                        text: "#FFFFFF",
-                        font: "serif" as const,
-                        headingFont: "Playfair Display",
-                        bodyFont: "Inter",
-                        fontLabel: "Classic Serif",
-                        layoutStyle: "luxury" as const,
-                        desc: "High-end Parisian beauty. Rich gold highlights against deep basalt black with sophisticated serif headers."
-                      },
-                      {
-                        id: "modern-minimalist",
-                        name: "Modern Minimalist",
-                        primary: "#F3F4F6",
-                        secondary: "#09090B",
-                        button: "#3F3F46",
-                        accent: "#A1A1AA",
-                        background: "#09090B",
-                        text: "#EDEDF0",
-                        font: "sans" as const,
-                        headingFont: "Montserrat",
-                        bodyFont: "Inter",
-                        fontLabel: "Inter Sans",
-                        layoutStyle: "modern" as const,
-                        desc: "Sleek, clinical, high-contrast monochrome design featuring razor-sharp modern aesthetic geometry."
-                      },
-                      {
-                        id: "rose-bloom",
-                        name: "Rose Bloom",
-                        primary: "#FDA4AF",
-                        secondary: "#1C1917",
-                        button: "#F43F5E",
-                        accent: "#FECDD3",
-                        background: "#1C1917",
-                        text: "#FFF1F2",
-                        font: "sans" as const,
-                        headingFont: "Poppins",
-                        bodyFont: "Inter",
-                        fontLabel: "Soft Sans",
-                        layoutStyle: "showcase" as const,
-                        desc: "Romantic champagne tones infused with vivid blooming rose petals for warm, feminine boutique experiences."
-                      },
-                      {
-                        id: "retro-barber",
-                        name: "Retro Barber",
-                        primary: "#E2AA3B",
-                        secondary: "#151210",
-                        button: "#9A3412",
-                        accent: "#F59E0B",
-                        background: "#151210",
-                        text: "#FEF3C7",
-                        font: "mono" as const,
-                        headingFont: "Montserrat",
-                        bodyFont: "Playfair Display",
-                        fontLabel: "Vintage Mono",
-                        layoutStyle: "compact" as const,
-                        desc: "Old-school gentleman prestige. Deep vintage leather and tobacco palettes wrapped with crisp mono labels."
-                      }
-                    ].map(preset => {
-                      const isSelected =
-                        siteConfig.primaryColor.toLowerCase() === preset.primary.toLowerCase() &&
-                        siteConfig.secondaryColor.toLowerCase() === preset.secondary.toLowerCase() &&
-                        siteConfig.buttonColor.toLowerCase() === preset.button.toLowerCase() &&
-                        (siteConfig.accentColor || "").toLowerCase() === preset.accent.toLowerCase() &&
-                        (siteConfig.backgroundColor || "").toLowerCase() === preset.background.toLowerCase() &&
-                        (siteConfig.textColor || "").toLowerCase() === preset.text.toLowerCase() &&
-                        siteConfig.headingFont === preset.headingFont &&
-                        siteConfig.bodyFont === preset.bodyFont &&
-                        siteConfig.layoutStyle === preset.layoutStyle &&
-                        siteConfig.fontFamily === preset.font;
-
-                      return (
-                        <button
-                          key={preset.id}
-                          onClick={() => setSiteConfig(prev => ({
-                            ...prev,
-                            primaryColor: preset.primary,
-                            secondaryColor: preset.secondary,
-                            buttonColor: preset.button,
-                            accentColor: preset.accent,
-                            backgroundColor: preset.background,
-                            textColor: preset.text,
-                            headingFont: preset.headingFont,
-                            bodyFont: preset.bodyFont,
-                            layoutStyle: preset.layoutStyle,
-                            fontFamily: preset.font
-                          }))}
-                          className={`group relative text-left p-3.5 rounded-xl border transition-all duration-300 bg-black/35 hover:bg-black/60 flex flex-col justify-between h-auto shadow-md cursor-pointer ${
-                            isSelected
-                              ? "border-[#D4AF37] ring-1 ring-[#D4AF37]/35 shadow-[#D4AF37]/5 bg-[#D4AF37]/[0.02]"
-                              : "border-white/[0.05] hover:border-white/15"
-                          }`}
-                        >
-                          <div className="space-y-2 w-full">
-                            {/* Color Swatch & Font Tag */}
-                            <div className="flex items-center justify-between">
-                              <div className="flex gap-1.5 p-1 bg-black/40 rounded-lg border border-white/[0.04]">
-                                <span className="w-3.5 h-3.5 rounded-md border border-white/20 shadow-inner flex shrink-0" style={{ backgroundColor: preset.primary }} title={`Primary: ${preset.primary}`} />
-                                <span className="w-3.5 h-3.5 rounded-md border border-white/20 shadow-inner flex shrink-0" style={{ backgroundColor: preset.secondary }} title={`Secondary: ${preset.secondary}`} />
-                                <span className="w-3.5 h-3.5 rounded-md border border-white/20 shadow-inner flex shrink-0" style={{ backgroundColor: preset.button }} title={`Buttons: ${preset.button}`} />
-                              </div>
-                              <span className={`text-[8px] font-mono uppercase px-1.5 py-0.5 rounded tracking-wider ${
-                                preset.font === "serif" ? "font-serif bg-amber-500/10 text-amber-300" :
-                                preset.font === "mono" ? "font-mono bg-blue-500/10 text-blue-300" :
-                                "font-sans bg-emerald-500/10 text-emerald-300"
-                              }`}>
-                                {preset.fontLabel}
-                              </span>
-                            </div>
-
-                            {/* Preset Title */}
-                            <div>
-                              <h4 className={`text-xs font-semibold tracking-tight transition-colors ${
-                                isSelected ? "text-[#D4AF37]" : "text-white group-hover:text-[#D4AF37]"
-                              }`}>
-                                {preset.name}
-                              </h4>
-                              <p className="text-[10px] text-gray-400 font-light leading-relaxed mt-1 line-clamp-3">
-                                {preset.desc}
-                              </p>
-                            </div>
-                          </div>
-
-                          {/* Preview Card Box embedded representing active typography */}
-                          <div className="mt-3.5 pt-2.5 border-t border-white/[0.04] w-full flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <div
-                                className="w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold shadow-inner border border-white/[0.08]"
-                                style={{
-                                  backgroundColor: preset.secondary,
-                                  color: preset.primary,
-                                  fontFamily: preset.font === "serif" ? "serif" : preset.font === "mono" ? "monospace" : "sans-serif"
-                                }}
-                              >
-                                {preset.font === "serif" ? "Aa" : preset.font === "mono" ? "T1" : "M_"}
-                              </div>
-                              <div className="text-[9px] font-mono text-gray-500">
-                                {preset.font === "serif" ? "Bespoke" : preset.font === "mono" ? "Precise" : "Clean"}
-                              </div>
-                            </div>
-                            {isSelected && (
-                              <span className="text-[10px] text-[#D4AF37] font-mono font-bold flex items-center gap-1">
-                                <span className="w-1.5 h-1.5 rounded-full bg-[#D4AF37] animate-pulse" />
-                                Active
-                              </span>
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-                                {/* Custom Color Palette (SECTION 2 - EXPANDABLE) */}
+                {/* Custom Color Palette (SECTION 2 - EXPANDABLE) */}
                 <div id="settings-palette" className="bg-[#111] border border-white/[0.04] rounded-xl overflow-hidden transition-all duration-300">
                   <button
                     type="button"
@@ -2508,10 +2696,146 @@ export default function App() {
                         </div>
                       </div>
                     </div>
-                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-300 ${isColorPaletteExpanded ? "rotate-180" : ""}`} />
+                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-300 ${(isColorPaletteExpanded || activeMobileTab === 'theme') ? "rotate-180" : ""}`} />
                   </button>
 
-                  <div className={`overflow-hidden transition-all duration-300 ${isColorPaletteExpanded ? "max-h-[800px] p-4 opacity-100 space-y-4" : "max-h-0 opacity-0"}`}>
+                  <div className={`overflow-hidden transition-all duration-300 ${(isColorPaletteExpanded || activeMobileTab === 'theme') ? "max-h-[1200px] p-4 opacity-100 space-y-4" : "max-h-0 opacity-0"}`}>
+                    
+                    {/* Extract from Image */}
+                    <div className="bg-black/30 border border-dashed border-white/20 rounded-lg p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                      <div className="text-left">
+                        <span className="text-xs font-semibold text-white block mb-1">Magic Extraction</span>
+                        <span className="text-[10px] text-gray-400">Upload any image to instantly generate a matching color palette.</span>
+                      </div>
+                      <div className="shrink-0">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          ref={paletteImageRef}
+                          onChange={handleExtractPaletteFromImage}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => paletteImageRef.current?.click()}
+                          disabled={isExtractingColors}
+                          className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs font-semibold text-[#D4AF37] flex items-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
+                        >
+                          {isExtractingColors ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                          {isExtractingColors ? "Extracting..." : "Upload Image"}
+                        </button>
+                      </div>
+                    </div>
+
+                    {extractedPalettePreview && (
+                      <div className="bg-black/40 border border-[#D4AF37]/20 rounded-xl p-4 space-y-4 animate-fadeIn">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-[11px] font-mono text-[#D4AF37] uppercase font-bold tracking-wider">Live Palette Preview</span>
+                          <button onClick={() => setExtractedPalettePreview(null)} className="text-gray-500 hover:text-white p-1">
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        
+                        {/* Interactive Preview Container */}
+                        <div 
+                          className="rounded-lg p-5 flex flex-col items-center justify-center text-center transition-colors duration-300 relative overflow-hidden shadow-inner border border-white/5"
+                          style={{ backgroundColor: extractedPalettePreview.palette[extractedPalettePreview.backgroundIndex] }}
+                        >
+                          <h4 
+                            className="text-lg font-bold mb-1.5 transition-colors duration-300"
+                            style={{ color: getContrastRatio(extractedPalettePreview.palette[extractedPalettePreview.buttonIndex], extractedPalettePreview.palette[extractedPalettePreview.backgroundIndex]) > 4.5 ? extractedPalettePreview.palette[extractedPalettePreview.buttonIndex] : '#ffffff' }}
+                          >
+                            Hero Headline
+                          </h4>
+                          <p 
+                            className="text-[10px] mb-4 opacity-80 transition-colors duration-300 max-w-[80%]"
+                            style={{ color: getContrastRatio('#ffffff', extractedPalettePreview.palette[extractedPalettePreview.backgroundIndex]) > 4.5 ? '#ffffff' : '#000000' }}
+                          >
+                            This is how your theme will look. Use the sliders below to test combinations.
+                          </p>
+                          <button 
+                            className="px-5 py-2 rounded-full text-xs font-bold transition-colors duration-300 shadow-md"
+                            style={{ 
+                              backgroundColor: extractedPalettePreview.palette[extractedPalettePreview.buttonIndex],
+                              color: getContrastRatio('#ffffff', extractedPalettePreview.palette[extractedPalettePreview.buttonIndex]) > 4.5 ? '#ffffff' : '#000000'
+                            }}
+                          >
+                            Sample Button
+                          </button>
+                        </div>
+
+                        {/* Sliders for picking colors */}
+                        <div className="space-y-4 pt-2">
+                          <div>
+                            <div className="flex justify-between mb-1.5">
+                              <label className="text-[9px] font-mono text-gray-400 uppercase">Background Color</label>
+                              <div className="w-4 h-4 rounded shadow-sm border border-white/10" style={{ backgroundColor: extractedPalettePreview.palette[extractedPalettePreview.backgroundIndex] }} />
+                            </div>
+                            <input 
+                              type="range" 
+                              min="0" 
+                              max={extractedPalettePreview.palette.length - 1} 
+                              step="1"
+                              value={extractedPalettePreview.backgroundIndex}
+                              onChange={(e) => setExtractedPalettePreview(prev => prev ? {...prev, backgroundIndex: parseInt(e.target.value)} : null)}
+                              className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#D4AF37]"
+                            />
+                            <div className="flex justify-between mt-1 px-1">
+                              {extractedPalettePreview.palette.map((c, i) => (
+                                <div key={`bg-${i}`} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: c, opacity: extractedPalettePreview.backgroundIndex === i ? 1 : 0.3 }} />
+                              ))}
+                            </div>
+                          </div>
+                          
+                          <div>
+                            <div className="flex justify-between mb-1.5">
+                              <label className="text-[9px] font-mono text-gray-400 uppercase">Button & Accent</label>
+                              <div className="w-4 h-4 rounded shadow-sm border border-white/10" style={{ backgroundColor: extractedPalettePreview.palette[extractedPalettePreview.buttonIndex] }} />
+                            </div>
+                            <input 
+                              type="range" 
+                              min="0" 
+                              max={extractedPalettePreview.palette.length - 1} 
+                              step="1"
+                              value={extractedPalettePreview.buttonIndex}
+                              onChange={(e) => setExtractedPalettePreview(prev => prev ? {...prev, buttonIndex: parseInt(e.target.value)} : null)}
+                              className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#D4AF37]"
+                            />
+                            <div className="flex justify-between mt-1 px-1">
+                              {extractedPalettePreview.palette.map((c, i) => (
+                                <div key={`btn-${i}`} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: c, opacity: extractedPalettePreview.buttonIndex === i ? 1 : 0.3 }} />
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        <button 
+                          onClick={() => {
+                            const btnColor = extractedPalettePreview.palette[extractedPalettePreview.buttonIndex];
+                            const bgColor = extractedPalettePreview.palette[extractedPalettePreview.backgroundIndex];
+                            // Try to pick a sensible secondary color
+                            const remaining = extractedPalettePreview.palette.filter(c => c !== btnColor && c !== bgColor);
+                            const secondaryColor = remaining.length > 0 ? remaining[0] : bgColor;
+                            
+                            setSiteConfig(prev => ({
+                              ...prev,
+                              primaryColor: btnColor,
+                              accentColor: btnColor,
+                              buttonColor: btnColor,
+                              secondaryColor: secondaryColor,
+                              backgroundColor: bgColor,
+                              textColor: getContrastRatio('#ffffff', bgColor) > 4.5 ? '#ffffff' : '#000000',
+                            }));
+                            setExtractedPalettePreview(null);
+                            notifyShort("Theme applied successfully!");
+                          }}
+                          className="w-full py-2.5 mt-2 bg-[#D4AF37] hover:bg-[#b5952f] text-black font-bold text-xs uppercase tracking-wider rounded-lg transition-colors"
+                        >
+                          Apply to Theme
+                        </button>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       {/* 1. Primary Color */}
                       <div className="bg-black/40 border border-white/[0.04] p-2.5 rounded-lg space-y-1.5 shadow-sm">
@@ -2723,7 +3047,8 @@ export default function App() {
                 </div>
 
                 {/* SECTION 11 - Typography Settings */}
-                <div className="bg-[#111] border border-white/[0.04] rounded-xl p-4 space-y-4">
+                {activeMobileTab !== 'theme' && (
+                  <div className="bg-[#111] border border-white/[0.04] rounded-xl p-4 space-y-4">
                   <div className="flex justify-between items-center border-b border-white/[0.04] pb-2">
                     <span className="text-[11.5px] font-mono uppercase text-[#D4AF37] font-semibold tracking-wider">SECTION 11: Typography Settings</span>
                     <span className="text-[9px] bg-[#D4AF37]/10 text-[#D4AF37] px-1.5 py-0.5 rounded font-mono">White-Label fonts</span>
@@ -2806,12 +3131,14 @@ export default function App() {
                       <option value="mono">Mono (Space Accent)</option>
                     </select>
                   </div>
-                </div>
+                )}
 
                 {/* SECTION 12: Buttons & Shape Styling */}
-                <div className="bg-[#111] border border-white/[0.04] rounded-xl p-4 space-y-4 shadow-xl">
-                  <div className="flex justify-between items-center border-b border-white/[0.04] pb-2">
-                    <span className="text-[11.5px] font-mono uppercase text-[#D4AF37] font-semibold tracking-wider">SECTION 12: Buttons & Shape Styling</span>
+                {activeMobileTab !== 'theme' && (
+                  <>
+                    <div className="bg-[#111] border border-white/[0.04] rounded-xl p-4 space-y-4 shadow-xl">
+                      <div className="flex justify-between items-center border-b border-white/[0.04] pb-2">
+                        <span className="text-[11.5px] font-mono uppercase text-[#D4AF37] font-semibold tracking-wider">SECTION 12: Buttons & Shape Styling</span>
                     <span className="text-[9px] bg-[#D4AF37]/10 text-[#D4AF37] px-1.5 py-0.5 rounded font-mono">White-Label Shape</span>
                   </div>
 
@@ -3256,13 +3583,14 @@ export default function App() {
                       Reset to Default
                     </button>
                   </div>
-                </div>
-              </div>
-            )}
+                </>
+              )}
+            </div>
+          )}
 
 
             {/* TAB: SECTIONS LAYOUT ROWS */}
-            {activeStep === 2 && (
+            {activeStep === 2 && activeMobileTab !== 'theme' && (
               <div className="space-y-4 animate-fadeIn">
                 <div className="p-3 bg-[#e2cc83]/5 border border-[#e2cc83]/25 rounded-xl space-y-1">
                   <span className="text-[10px] text-[#e2cc83] uppercase tracking-wider font-bold">Homepage Section Architect</span>
@@ -3323,8 +3651,8 @@ export default function App() {
               </div>
             )}
 
-            {/* TAB: CONTENT CONSOLIDATION */}
-            {activeStep === 3 && (
+            {/* STEP 3: SERVICES & PRICES */}
+            {activeStep === 3 && activeMobileTab !== 'theme' && (
               <div className="space-y-6 animate-fadeIn pb-10">
                 <div className="p-3 bg-blue-500/5 border border-blue-500/10 rounded-xl space-y-1">
                   <span className="text-[10px] text-blue-400 uppercase tracking-wider font-bold">Business Content Hub</span>
@@ -3400,7 +3728,7 @@ export default function App() {
             )}
 
             {/* TAB: BOOKING CALENDAR & SLOTS DEFINITION */}
-            {activeStep === 3 && (
+            {activeStep === 3 && activeMobileTab !== 'theme' && (
               <div id="settings-booking" className="space-y-6 animate-fadeIn pb-10">
                 <div className="p-3 bg-amber-500/5 border border-amber-500/10 rounded-xl space-y-1">
                   <span className="text-[10px] text-amber-450 uppercase tracking-wider font-bold" style={{ color: siteConfig.primaryColor }}>Booking Calendar Config</span>
@@ -4169,16 +4497,25 @@ export default function App() {
                         return (
                           <div key={i} className="bg-black/60 border border-white/[0.04] p-3 rounded-lg flex flex-col md:flex-row gap-3">
                             {/* Image area */}
-                            <div className="w-full md:w-20 md:h-20 aspect-square shrink-0 bg-stone-900 border border-white/10 rounded overflow-hidden relative group">
+                            <div className="w-full md:w-24 md:h-24 shrink-0 bg-stone-900 border border-white/10 rounded overflow-hidden relative group">
                               <img src={imgUrl} className="w-full h-full object-cover" />
-                              <button
-                                type="button"
-                                onClick={() => removeGalleryImage(i)}
-                                className="absolute top-1 right-1 bg-red-950/90 hover:bg-red-900 text-red-200 p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer border border-red-500/10"
-                                title="Remove Photo"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
+                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 backdrop-blur-sm">
+                                <div className="flex items-center gap-1.5">
+                                  {/* Replace Button */}
+                                  <label className="bg-white/10 hover:bg-[#D4AF37] hover:text-black text-white p-1.5 rounded cursor-pointer transition-colors" title="Replace Image">
+                                    <input type="file" accept="image/*" className="hidden" onChange={(e) => handleReplaceGalleryImage(e, i)} />
+                                    <Upload className="w-3.5 h-3.5" />
+                                  </label>
+                                  {/* Crop/Edit Button */}
+                                  <button type="button" onClick={() => handleEditGalleryImage(imgUrl, i)} className="bg-white/10 hover:bg-[#D4AF37] hover:text-black text-white p-1.5 rounded cursor-pointer transition-colors" title="Crop / Adjust">
+                                    <Crop className="w-3.5 h-3.5" />
+                                  </button>
+                                  {/* Delete Button */}
+                                  <button type="button" onClick={() => removeGalleryImage(i)} className="bg-white/10 hover:bg-red-500 hover:text-white text-white p-1.5 rounded cursor-pointer transition-colors" title="Delete Image">
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
                             </div>
 
                             {/* Meta edits & Gemini Tool */}
@@ -4288,6 +4625,64 @@ export default function App() {
                     </div>
                   </div>
 
+                  {/* OPEN GRAPH PREVIEW PANEL */}
+                  <div className="bg-[#111] border border-white/[0.04] p-4 rounded-xl space-y-4 mt-6">
+                    <div className="flex items-center justify-between border-b border-white/[0.04] pb-2">
+                      <h3 className="text-xs font-mono uppercase text-gray-500">Open Graph (Social Preview)</h3>
+                      <span className="text-[9px] bg-white/[0.05] text-gray-400 px-1.5 py-0.5 rounded font-mono">WhatsApp/FB</span>
+                    </div>
+
+                    <div className="border border-white/[0.1] rounded-lg overflow-hidden bg-[#1a1a1a]">
+                      <div className="h-24 bg-stone-900 flex items-center justify-center overflow-hidden">
+                        {siteConfig.ogImage ? (
+                          <img src={siteConfig.ogImage} className="w-full h-full object-cover" alt="Preview" />
+                        ) : (
+                          <div className="text-gray-600 text-xs">No Image</div>
+                        )}
+                      </div>
+                      <div className="p-3">
+                        <h4 className="text-xs font-bold text-white truncate">{siteConfig.ogTitle || "Website Title"}</h4>
+                        <p className="text-[10px] text-gray-400 mt-1 line-clamp-2">{siteConfig.ogDescription || "Website description..."}</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase text-gray-500 mb-1">Sharing Title</label>
+                        <input
+                          type="text"
+                          className="w-full bg-black border border-white/[0.08] focus:border-[#D4AF37] text-xs text-white rounded px-2.5 py-1.5"
+                          value={siteConfig.ogTitle || ""}
+                          onChange={e => setSiteConfig(prev => ({ ...prev, ogTitle: e.target.value }))}
+                          placeholder="My Awesome Website"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase text-gray-500 mb-1">Sharing Description</label>
+                        <textarea
+                          rows={2}
+                          className="w-full bg-black border border-white/[0.08] focus:border-[#D4AF37] text-xs text-gray-300 rounded p-2"
+                          value={siteConfig.ogDescription || ""}
+                          onChange={e => setSiteConfig(prev => ({ ...prev, ogDescription: e.target.value }))}
+                          placeholder="Check out my website!"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                         <input type="file" accept="image/*" id="og-image-input" className="hidden" onChange={(e) => {
+                           const file = e.target.files?.[0];
+                           if (file) {
+                             const reader = new FileReader();
+                             reader.onloadend = () => {
+                               setSiteConfig(prev => ({ ...prev, ogImage: reader.result as string }));
+                             };
+                             reader.readAsDataURL(file);
+                           }
+                         }} />
+                         <label htmlFor="og-image-input" className="px-3 py-1.5 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 border border-[#D4AF37]/30 text-[#D4AF37] rounded-lg text-xs font-bold cursor-pointer transition-all">Upload Social Image</label>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="border border-dashed border-[#D4AF37]/35 rounded-xl bg-gradient-to-br from-[#D4AF37]/10 to-transparent p-4 space-y-3">
                     <div className="flex items-center gap-2 text-xs font-semibold text-[#D4AF37]">
                       <Sparkles className="w-3.5 h-3.5 animate-pulse" />
@@ -4322,7 +4717,7 @@ export default function App() {
             )}
             
             {/* STEP 4: PUBLISH */}
-            {activeStep === 4 && (
+            {activeStep === 4 && activeMobileTab !== 'theme' && (
               <div className="space-y-6 animate-fadeIn pb-10">
                 <div className="p-4 bg-[#D4AF37]/10 border border-[#D4AF37]/30 rounded-xl space-y-2 text-center">
                   <div className="mx-auto w-12 h-12 bg-[#D4AF37] rounded-full flex items-center justify-center shadow-lg shadow-[#D4AF37]/20 mb-3">
@@ -4452,7 +4847,7 @@ export default function App() {
           )}
 
           {/* THE SIMULATED BROWSER / CUSTOMER EXPERIENCE VIEW */}
-          <div className="flex-1 flex items-center justify-center overflow-hidden relative">
+          <div className="flex-1 w-full flex items-center justify-center overflow-hidden relative">
             <div
               className={`h-full overflow-hidden flex flex-col transition-all duration-300 ${
                 isCustomerOnlyMode
@@ -4505,6 +4900,12 @@ export default function App() {
                 }`}
                 style={{ backgroundColor: siteConfig.backgroundColor || siteConfig.secondaryColor, color: siteConfig.textColor || "#f3f4f6" }}
               >
+                {previewDevice === 'mobile' && !isInteracted && (
+                  <div className="absolute inset-0 z-50 bg-black/70 flex flex-col items-center justify-center animate-pulse" onClick={() => setIsInteracted(true)}>
+                    <Hand className="w-12 h-12 text-white mb-4 animate-bounce" />
+                    <p className="text-white text-sm font-medium">Tap to Preview</p>
+                  </div>
+                )}
                 {/* Custom typography rendering style injectors */}
                 <style dangerouslySetInnerHTML={{ __html: `
                   .customer-preview-container h1, 
@@ -5049,7 +5450,7 @@ ${serv.category ? `Category: ${serv.category}\n` : ""}${serv.duration ? `Duratio
                                   <motion.div
                                     key={stylist.id}
                                     variants={premiumItemVariants}
-                                    className="flex flex-col sm:flex-row gap-4 p-4 border rounded-xl duration-300 bg-black/30"
+                                    className={`flex flex-col sm:flex-row gap-4 p-4 border rounded-xl duration-300 bg-black/30 ${siteConfig.animations?.hoverEffects ? "hover:scale-105 transition-transform duration-300" : ""}`}
                                     style={{ borderColor: `${siteConfig.primaryColor}15` }}
                                   >
                                     {siteConfig.showStaffPhotos && (
@@ -5607,7 +6008,7 @@ ${serv.category ? `Category: ${serv.category}\n` : ""}${serv.duration ? `Duratio
 
                   {/* INTERACTIVE BOOKING WIDGET MODAL */}
                   {isBookingModalOpen && (
-                    <div className="absolute inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
+                    <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[70] flex items-center justify-center p-4 overflow-y-auto">
                       <div className="bg-[#0e0e0e] border border-white/10 w-full max-w-md rounded-2xl overflow-hidden shadow-2xl relative flex flex-col my-auto max-h-[90vh]">
                         {/* Header banner */}
                         <div className="border-b border-white/[0.05] p-4 flex items-center justify-between relative bg-black/40">
@@ -5940,6 +6341,23 @@ ${serv.category ? `Category: ${serv.category}\n` : ""}${serv.duration ? `Duratio
                       setCropperOpen(false);
                       setCropperSrc("");
                     }}
+                    onDelete={() => {
+                      if (cropperType === "gallery-edit") {
+                        const targetIdx = parseInt(cropperTargetId);
+                        if (!isNaN(targetIdx)) {
+                          removeGalleryImage(targetIdx);
+                        }
+                      }
+                      setCropperOpen(false);
+                      setCropperSrc("");
+                    }}
+                    onReplace={(file) => {
+                      const reader = new FileReader();
+                      reader.onloadend = () => {
+                        setCropperSrc(reader.result as string);
+                      };
+                      reader.readAsDataURL(file);
+                    }}
                   />
 
                 </div>
@@ -5952,6 +6370,10 @@ ${serv.category ? `Category: ${serv.category}\n` : ""}${serv.duration ? `Duratio
         </section>
         
       </main>
+
+      {!isCustomerOnlyMode && (
+        <MobileBottomNav activeTab={activeMobileTab} setActiveTab={setActiveMobileTab} />
+      )}
 
       {/* FLOATING ADMIN TRIGGER IF CUSTOMER ONLY */}
       {isCustomerOnlyMode && (

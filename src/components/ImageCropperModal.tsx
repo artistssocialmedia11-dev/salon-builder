@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from "react";
-import { X, ZoomIn, ZoomOut, Check, Move, Grid, RefreshCw } from "lucide-react";
+import { X, ZoomIn, ZoomOut, Check, Move, Grid, RefreshCw, Trash2, Upload } from "lucide-react";
 
 interface ImageCropperModalProps {
   isOpen: boolean;
   imageSrc: string;
-  imageType: "logo" | "banner" | "gallery" | "team" | "testimonial";
+  imageType: "logo" | "banner" | "gallery" | "team" | "testimonial" | "gallery-edit";
   onCrop: (croppedDataUrl: string) => void;
   onCancel: () => void;
+  onDelete?: () => void;
+  onReplace?: (file: File) => void;
 }
 
 type AspectRatioPreset = {
@@ -21,7 +23,10 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
   imageType,
   onCrop,
   onCancel,
+  onDelete,
+  onReplace,
 }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [imgElement, setImgElement] = useState<HTMLImageElement | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -296,7 +301,7 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
         </div>
 
         {/* Content Wrapper */}
-        <div className="flex-1 flex flex-col min-h-0 bg-black/20">
+        <div className="flex-1 flex flex-col min-h-0 bg-black/20 overflow-y-auto">
           {loading ? (
             <div className="h-72 flex flex-col items-center justify-center space-y-3">
               <RefreshCw className="w-6 h-6 text-[#D4AF37] animate-spin" />
@@ -404,72 +409,102 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
                   Drag photo to position • Use slider to zoom
                 </div>
               </div>
-
-              {/* Controls footer */}
-              <div className="border-t border-white/[0.05] p-4 space-y-4 bg-black/40">
-                <div className="flex flex-col md:flex-row items-center gap-3 justify-between">
-                  {/* Zoom controls */}
-                  <div className="flex items-center gap-2.5 w-full md:w-auto">
-                    <button
-                      onClick={() => setZoom(prev => Math.max(1, prev - 0.1))}
-                      className="text-gray-400 hover:text-white transition-colors bg-white/5 hover:bg-white/10 p-1.5 rounded-lg"
-                    >
-                      <ZoomOut className="w-4 h-4" />
-                    </button>
-                    <input
-                      type="range"
-                      min={1}
-                      max={3}
-                      step={0.01}
-                      value={zoom}
-                      onChange={e => setZoom(parseFloat(e.target.value))}
-                      className="w-full md:w-36 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#D4AF37]"
-                    />
-                    <button
-                      onClick={() => setZoom(prev => Math.min(3, prev + 0.1))}
-                      className="text-gray-400 hover:text-white transition-colors bg-white/5 hover:bg-white/10 p-1.5 rounded-lg"
-                    >
-                      <ZoomIn className="w-4 h-4" />
-                    </button>
-                    <span className="text-[10px] font-mono text-gray-500 min-w-[28px]">
-                      {Math.round(zoom * 100)}%
-                    </span>
-                  </div>
-
-                  {/* Actions (Rotation, Cancel, Save) */}
-                  <div className="flex items-center justify-end gap-2 w-full md:w-auto">
-                    <button
-                      type="button"
-                      onClick={rotateImage}
-                      className="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs text-gray-300 transition-colors flex items-center gap-1.5 cursor-pointer"
-                      title="Rotate 90° Clockwise"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      Rotate
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={onCancel}
-                      className="px-4 py-1.5 bg-transparent hover:bg-white/5 border border-white/5 rounded-lg text-xs text-gray-400 transition-colors cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleCropSave}
-                      className="px-5 py-1.5 bg-[#D4AF37] hover:bg-[#bfa345] text-black font-bold uppercase tracking-wider text-[10px] rounded-lg transition-colors flex items-center gap-1.5 shadow-lg shadow-[#D4AF37]/10 cursor-pointer"
-                    >
-                      <Check className="w-4 h-4" strokeWidth={3} />
-                      Apply & Save
-                    </button>
-                  </div>
-                </div>
-              </div>
             </>
           )}
         </div>
+        
+        {/* Controls footer (Sticky) */}
+        {!loading && !error && (
+          <div className="border-t border-white/[0.05] p-4 space-y-4 bg-[#0a0a0a] shrink-0 sticky bottom-0 z-10 shadow-[0_-10px_20px_rgba(0,0,0,0.5)]">
+            <div className="flex flex-col md:flex-row items-center gap-3 justify-between">
+              {/* Zoom controls */}
+              <div className="flex items-center gap-2.5 w-full md:w-auto">
+                <button
+                  onClick={() => setZoom(prev => Math.max(1, prev - 0.1))}
+                  className="text-gray-400 hover:text-white transition-colors bg-white/5 hover:bg-white/10 p-1.5 rounded-lg"
+                >
+                  <ZoomOut className="w-4 h-4" />
+                </button>
+                <input
+                  type="range"
+                  min={1}
+                  max={3}
+                  step={0.01}
+                  value={zoom}
+                  onChange={e => setZoom(parseFloat(e.target.value))}
+                  className="w-full md:w-36 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#D4AF37]"
+                />
+                <button
+                  onClick={() => setZoom(prev => Math.min(3, prev + 0.1))}
+                  className="text-gray-400 hover:text-white transition-colors bg-white/5 hover:bg-white/10 p-1.5 rounded-lg"
+                >
+                  <ZoomIn className="w-4 h-4" />
+                </button>
+                <span className="text-[10px] font-mono text-gray-500 min-w-[28px]">
+                  {Math.round(zoom * 100)}%
+                </span>
+              </div>
+
+              {/* Actions (Rotation, Cancel, Save) */}
+              <div className="flex items-center justify-end gap-2 w-full md:w-auto">
+                { (imageType === "gallery" || imageType === "gallery-edit") && onDelete && (
+                  <button
+                    type="button"
+                    onClick={onDelete}
+                    className="px-3 py-1.5 bg-red-950/20 hover:bg-red-900/50 border border-red-500/20 rounded-lg text-xs text-red-400 transition-colors flex items-center gap-1.5 cursor-pointer"
+                    title="Delete Image"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete
+                  </button>
+                )}
+                { (imageType === "gallery" || imageType === "gallery-edit") && onReplace && (
+                  <label
+                    className="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs text-gray-300 transition-colors flex items-center gap-1.5 cursor-pointer"
+                    title="Replace Image"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    Replace
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept="image/*"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          onReplace(e.target.files[0]);
+                        }
+                      }}
+                    />
+                  </label>
+                )}
+                <button
+                  type="button"
+                  onClick={rotateImage}
+                  className="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs text-gray-300 transition-colors flex items-center gap-1.5 cursor-pointer"
+                  title="Rotate 90° Clockwise"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Rotate
+                </button>
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  className="px-4 py-1.5 bg-transparent hover:bg-gray-800 border border-gray-400 rounded-lg text-xs text-gray-300 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCropSave}
+                  className="px-5 py-1.5 bg-[#1D4ED8] hover:bg-[#1e40af] text-white font-bold uppercase tracking-wider text-[10px] rounded-lg transition-colors flex items-center gap-1.5 shadow-lg shadow-blue-900/50 cursor-pointer"
+                >
+                  <Check className="w-4 h-4" strokeWidth={3} />
+                  Apply & Save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -142,7 +142,7 @@ export const ServicesManagementPanel = ({
           </div>
           <button 
             onClick={handleAddService}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-[#D4AF37] hover:bg-[#c29e2f] text-black text-sm font-bold rounded-xl transition-all shadow-lg shadow-[#D4AF37]/10"
+            className="w-full flex-shrink-0 flex items-center justify-center gap-2 px-5 py-2.5 bg-[#D4AF37] hover:bg-[#c29e2f] text-black text-sm font-bold rounded-xl transition-all shadow-lg shadow-[#D4AF37]/10"
           >
             <Plus className="w-4 h-4" />
             Add New Service
