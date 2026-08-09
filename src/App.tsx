@@ -1536,6 +1536,103 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* BRAND ASSETS CARD: LOGO */}
+                <div className="bg-[#111] border border-white/[0.04] rounded-xl p-4 space-y-4 shadow-xl">
+                  <div className="flex items-center justify-between pb-2 border-b border-white/[0.04]">
+                    <span className="text-[11.5px] font-mono uppercase text-[#D4AF37] font-semibold tracking-wider">Brand Logo (PNG/SVG)</span>
+                    {siteConfig.logo && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSiteConfig(prev => ({ ...prev, logo: "" }));
+                          notifyShort("Removed brand logo.");
+                        }}
+                        className="text-[10px] text-red-400 hover:text-red-300 font-semibold flex items-center gap-1 transition-colors"
+                      >
+                        Remove Logo
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Logo Preview & Selector */}
+                  {siteConfig.logo ? (
+                    <div className="relative group rounded-xl overflow-hidden border border-white/10 bg-black h-20 flex items-center justify-center p-3">
+                      <img 
+                        src={siteConfig.logo} 
+                        alt="Brand Logo Preview" 
+                        className="h-12 max-w-full object-contain filter drop-shadow-md group-hover:scale-105 transition-all duration-300" 
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2 transition-all duration-300">
+                        <button
+                          type="button"
+                          onClick={() => logoInputRef.current?.click()}
+                          className="px-2.5 py-1 bg-[#D4AF37] text-black text-[9px] font-bold rounded hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                        >
+                          Replace Logo
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => logoInputRef.current?.click()}
+                      className="w-full py-4 border border-dashed border-white/10 hover:border-[#D4AF37]/40 rounded-xl bg-black/40 hover:bg-black/60 flex flex-col items-center justify-center gap-1.5 transition-all group cursor-pointer"
+                    >
+                      <Upload className="w-4 h-4 text-gray-400 group-hover:text-[#D4AF37] transition-colors" />
+                      <div className="text-center">
+                        <p className="text-[11px] font-semibold text-gray-300 group-hover:text-white transition-colors">Upload Brand Logo</p>
+                        <p className="text-[9px] text-gray-500 font-mono mt-0.5">Transparent background PNG or SVG recommended</p>
+                      </div>
+                    </button>
+                  )}
+
+                  {/* Hidden Logo Input */}
+                  <input
+                    type="file"
+                    ref={logoInputRef}
+                    onChange={handleLogoUpload}
+                    accept="image/*"
+                    className="hidden"
+                  />
+
+                  {/* Pre-designed vector monogram presets */}
+                  <div className="space-y-1.5 pt-1">
+                    <span className="block text-[9px] font-mono text-gray-500 uppercase">Or select a boutique brand monogram:</span>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        {
+                          name: "Royal 'N'",
+                          url: "https://api.dicebear.com/7.x/initials/svg?seed=N&backgroundColor=d4af37&textColor=111"
+                        },
+                        {
+                          name: "Aura 'A'",
+                          url: "https://api.dicebear.com/7.x/initials/svg?seed=A&backgroundColor=111111&textColor=d4af37"
+                        },
+                        {
+                          name: "Bloom 'B'",
+                          url: "https://api.dicebear.com/7.x/initials/svg?seed=B&backgroundColor=111111&textColor=d4af37"
+                        }
+                      ].map((preset) => (
+                        <button
+                          key={preset.name}
+                          type="button"
+                          onClick={() => {
+                            setSiteConfig(prev => ({ ...prev, logo: preset.url }));
+                            notifyShort(`Selected "${preset.name}" brand monogram!`);
+                          }}
+                          className={`relative py-1.5 px-2.5 rounded-lg border flex items-center justify-center gap-1 bg-black/40 hover:bg-black/80 transition-all hover:scale-105 active:scale-95 cursor-pointer ${
+                            siteConfig.logo === preset.url ? "border-[#D4AF37] text-[#D4AF37]" : "border-white/5 hover:border-white/20 text-gray-400 hover:text-white"
+                          }`}
+                        >
+                          <img src={preset.url} alt={preset.name} className="w-4 h-4 rounded-full" />
+                          <span className="text-[9px] font-mono font-medium truncate">{preset.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
                 {/* TAGLINE & AI */}
                 <div className="bg-[#111] border border-white/[0.04] rounded-xl p-4 space-y-4">
                   <div className="flex items-center justify-between">
@@ -1692,6 +1789,116 @@ export default function App() {
                         placeholder="Book Appointment"
                       />
                     </div>
+
+                    {/* Hero Background Image Settings */}
+                    <div className="border-t border-white/[0.04] pt-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-[10px] font-mono text-gray-500 uppercase">Hero Background Image</label>
+                        {siteConfig.banner && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSiteConfig(prev => ({ ...prev, banner: "" }));
+                              notifyShort("Removed custom background image.");
+                            }}
+                            className="text-[10px] text-red-400 hover:text-red-300 font-semibold flex items-center gap-1 transition-colors"
+                          >
+                            Remove Image
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Current Image Preview or Upload Dropzone */}
+                      {siteConfig.banner ? (
+                        <div className="relative group rounded-xl overflow-hidden border border-white/10 bg-black/40 h-32 flex items-center justify-center">
+                          <img 
+                            src={siteConfig.banner} 
+                            alt="Current Banner" 
+                            className="w-full h-full object-cover opacity-85 group-hover:scale-105 transition-all duration-500" 
+                            referrerPolicy="no-referrer"
+                          />
+                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2 transition-all duration-300">
+                            <button
+                              type="button"
+                              onClick={() => bannerInputRef.current?.click()}
+                              className="px-3 py-1.5 bg-[#D4AF37] text-black text-[10px] font-bold rounded-lg hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                            >
+                              Replace Image
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => bannerInputRef.current?.click()}
+                          className="w-full h-32 border border-dashed border-white/10 hover:border-[#D4AF37]/40 rounded-xl bg-black/40 hover:bg-black/60 flex flex-col items-center justify-center gap-2 transition-all group cursor-pointer"
+                        >
+                          <Upload className="w-5 h-5 text-gray-400 group-hover:text-[#D4AF37] transition-colors" />
+                          <div className="text-center">
+                            <p className="text-[11px] font-semibold text-gray-300 group-hover:text-white transition-colors">Upload Custom Image</p>
+                            <p className="text-[9px] text-gray-500 font-mono mt-0.5">High-res PNG, JPG or WEBP (16:9 recommended)</p>
+                          </div>
+                        </button>
+                      )}
+
+                      {/* Hidden File Input */}
+                      <input
+                        type="file"
+                        ref={bannerInputRef}
+                        onChange={handleBannerUpload}
+                        accept="image/*"
+                        className="hidden"
+                      />
+
+                      {/* Premium Unsplash Presets */}
+                      <div className="space-y-2 pt-1">
+                        <span className="block text-[10px] font-mono text-gray-500 uppercase">Or select a premium salon preset:</span>
+                        <div className="grid grid-cols-4 gap-2">
+                          {[
+                            {
+                              name: "Minimalist",
+                              url: "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=800&q=80"
+                            },
+                            {
+                              name: "Luxury Gold",
+                              url: "https://images.unsplash.com/photo-1521590832167-7bcbfaa6381f?auto=format&fit=crop&w=800&q=80"
+                            },
+                            {
+                              name: "Serene Spa",
+                              url: "https://images.unsplash.com/photo-1600334089648-b0d9d3028eb2?auto=format&fit=crop&w=800&q=80"
+                            },
+                            {
+                              name: "Elegant Studio",
+                              url: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=800&q=80"
+                            }
+                          ].map((preset) => (
+                            <button
+                              key={preset.name}
+                              type="button"
+                              onClick={() => {
+                                setSiteConfig(prev => ({ ...prev, banner: preset.url }));
+                                notifyShort(`Selected "${preset.name}" preset background!`);
+                              }}
+                              className={`relative aspect-video rounded-lg overflow-hidden border transition-all hover:scale-105 active:scale-95 cursor-pointer ${
+                                siteConfig.banner === preset.url ? "border-[#D4AF37] ring-1 ring-[#D4AF37]/50" : "border-white/5 hover:border-white/20"
+                              }`}
+                              title={`Set "${preset.name}" background`}
+                            >
+                              <img 
+                                src={preset.url} 
+                                alt={preset.name} 
+                                className="w-full h-full object-cover" 
+                                referrerPolicy="no-referrer"
+                              />
+                              <div className="absolute inset-x-0 bottom-0 bg-black/70 py-0.5 text-[8px] text-center text-gray-300 font-mono">
+                                {preset.name}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
                   </div>
                 </div>
 
