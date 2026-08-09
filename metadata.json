@@ -1,0 +1,6 @@
+{
+  "name": "Salon Website Builder",
+  "description": "An interactive salon website builder with live multi-device preview, customizable themes, and AI-assisted content writing capabilities.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
